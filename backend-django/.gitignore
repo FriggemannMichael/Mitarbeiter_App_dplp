@@ -1,0 +1,8 @@
+.env
+DEV_CREDENTIALS.md
+__pycache__/
+*.pyc
+*.pyo
+staticfiles/
+data/
+*.sqlite3

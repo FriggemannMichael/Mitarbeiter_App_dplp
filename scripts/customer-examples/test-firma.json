@@ -1,0 +1,45 @@
+{
+    "customer": {
+        "company_name": "Test-Firma GmbH",
+        "company_address": "Teststraße 123, 12345 Teststadt",
+        "company_phone": "+49999999999",
+        "company_email": "info@test-firma.de",
+        "primary_color": "#20c997",
+        "theme_color": "#20c997"
+    },
+    "contact": {
+        "allowed_emails": [
+            "info@test-firma.de",
+            "admin@test-firma.de"
+        ],
+        "allowed_whatsapp": [
+            "+49999999999"
+        ],
+        "default_email": "info@test-firma.de",
+        "default_whatsapp": "+49999999999"
+    },
+    "email": {
+        "smtp_host": "smtp.test-firma.de",
+        "smtp_port": 587,
+        "smtp_encryption": "tls",
+        "smtp_username": "info@test-firma.de",
+        "smtp_password": "",
+        "from_email": "info@test-firma.de",
+        "from_name": "Test-Firma Zeiterfassung"
+    },
+    "technical": {
+        "api_endpoint": "https://test-firma-timesheet.de/backend",
+        "deployment_path": "/",
+        "app_domain": "https://test-firma-timesheet.de",
+        "backend_domain": "https://test-firma-timesheet.de",
+        "pwa_qr_code_url": "https://test-firma-timesheet.de",
+        "cors_allowed_origins": [
+            "https://test-firma-timesheet.de",
+            "http://localhost:5173"
+        ]
+    },
+    "logo": {
+        "path": "assets/logo-test-firma.png",
+        "source_file": ""
+    }
+}

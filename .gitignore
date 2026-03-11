@@ -1,0 +1,70 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-*
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build directories
+dev-dist
+
+# Environment
+.env
+.env.local
+.env.production
+.env.customer-*
+backend/.env
+backend/.env.local
+backend/.env.production
+backend-django/.env*
+!backend-django/.env.example
+!backend-django/.env.app.example
+!backend-django/.env.docker.example
+
+# Local backend secrets/artifacts
+backend-django/cookies.txt
+backend-django/DEV_CREDENTIALS.md
+
+# Backend - Sensitive Files
+backend/config.php
+backend/database.sqlite
+backend/database.sqlite.*
+backend/logs/
+backend/*.log
+
+# Test artifacts
+nul
+src/test/nul
+
+# Local backups created by tooling/agents
+backup/
+
+# SSH Keys
+y
+y.pub
+*.pem
+id_rsa
+id_rsa.pub
+
+#ai
+.claude
+.github

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Debug: LocalStorage Reset</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .button { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #1d4ed8; }
+        .result { background: #f0f9ff; border: 1px solid #bae6fd; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+        .success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #059669; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ WPDL Timesheet - Debug Tool</h1>
+        <p>Tool zur Diagnose und Reparatur von LocalStorage-Problemen</p>
+        
+        <div id="results"></div>
+        
+        <h3>LocalStorage-Status prüfen:</h3>
+        <button class="button" onclick="checkLocalStorage()">📊 Status prüfen</button>
+        <button class="button" onclick="listAllData()">📋 Alle Daten anzeigen</button>
+        
+        <h3>Daten zurücksetzen:</h3>
+        <button class="button" onclick="clearAppData()">🗑️ App-Daten löschen</button>
+        <button class="button" onclick="clearAllLocalStorage()">💣 Alles löschen (Vorsicht!)</button>
+        
+        <h3>Onboarding zurücksetzen:</h3>
+        <button class="button" onclick="resetOnboarding()">🔄 Welcome-Screen erzwingen</button>
+        
+        <h3>Test-Setup:</h3>
+        <button class="button" onclick="createTestData()">🧪 Test-Daten erstellen</button>
+    </div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, type = 'result') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            resultsDiv.appendChild(div);
+        }
+        
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+        }
+        
+        function checkLocalStorage() {
+            clearResults();
+            
+            try {
+                // LocalStorage verfügbar?
+                if (typeof Storage !== "undefined") {
+                    addResult('✅ LocalStorage ist verfügbar', 'success');
+                } else {
+                    addResult('❌ LocalStorage ist NICHT verfügbar', 'error');
+                    return;
+                }
+                
+                // Test-Schreiben/Lesen
+                const testKey = 'wpdl_test_' + Date.now();
+                localStorage.setItem(testKey, 'test');
+                const testValue = localStorage.getItem(testKey);
+                localStorage.removeItem(testKey);
+                
+                if (testValue === 'test') {
+                    addResult('✅ LocalStorage funktioniert korrekt', 'success');
+                } else {
+                    addResult('❌ LocalStorage-Test fehlgeschlagen', 'error');
+                }
+                
+                // Speicher-Platz prüfen
+                let totalSize = 0;
+                for (let key in localStorage) {
+                    if (localStorage.hasOwnProperty(key)) {
+                        totalSize += localStorage[key].length + key.length;
+                    }
+                }
+                
+                addResult(`📊 LocalStorage-Größe: ${totalSize} Zeichen (~${Math.round(totalSize/1024)} KB)`);
+                
+                // App-spezifische Keys prüfen
+                const appKeys = [];
+                for (let key in localStorage) {
+                    if (key.startsWith('wpdl_') || key.includes('i18next') || key.includes('timesheet')) {
+                        appKeys.push(key);
+                    }
+                }
+                
+                if (appKeys.length > 0) {
+                    addResult(`🔍 App-Keys gefunden: ${appKeys.length}<br>` + appKeys.map(k => `• ${k}`).join('<br>'));
+                } else {
+                    addResult('ℹ️ Keine App-spezifischen Keys gefunden');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Fehler beim LocalStorage-Test: ${error.message}`, 'error');
+            }
+        }
+        
+        function listAllData() {
+            clearResults();
+            
+            try {
+                const keys = Object.keys(localStorage);
+                
+                if (keys.length === 0) {
+                    addResult('ℹ️ LocalStorage ist leer');
+                    return;
+                }
+                
+                addResult(`📋 LocalStorage enthält ${keys.length} Einträge:`);
+                
+                keys.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    const preview = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                    addResult(`<strong>${key}:</strong><br><pre style="background:#f8f9fa;padding:5px;margin:5px 0;font-size:12px;">${preview}</pre>`);
+                });
+                
+            } catch (error) {
+                addResult(`❌ Fehler beim Auflisten: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearAppData() {
+            clearResults();
+            
+            try {
+                const keysToRemove = [];
+                
+                // WPDL-spezifische Keys finden
+                for (let key in localStorage) {
+                    if (key.startsWith('wpdl_') || key.includes('timesheet')) {
+                        keysToRemove.push(key);
+                    }
+                }
+                
+                // Entfernen
+                keysToRemove.forEach(key => localStorage.removeItem(key));
+                
+                addResult(`✅ ${keysToRemove.length} App-spezifische Einträge gelöscht`, 'success');
+                
+                if (keysToRemove.length > 0) {
+                    addResult('Gelöschte Keys:<br>' + keysToRemove.map(k => `• ${k}`).join('<br>'));
+                }
+                
+            } catch (error) {
+                addResult(`❌ Fehler beim Löschen: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearAllLocalStorage() {
+            if (confirm('WARNUNG: Dies löscht ALLE LocalStorage-Daten (auch von anderen Websites auf localhost). Fortfahren?')) {
+                clearResults();
+                
+                try {
+                    const count = localStorage.length;
+                    localStorage.clear();
+                    addResult(`✅ Alle ${count} LocalStorage-Einträge gelöscht`, 'success');
+                } catch (error) {
+                    addResult(`❌ Fehler beim Löschen: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        function resetOnboarding() {
+            clearResults();
+            
+            try {
+                // Onboarding-spezifische Keys löschen
+                localStorage.removeItem('wpdl_employee_name');
+                localStorage.removeItem('wpdl_consent');
+                localStorage.removeItem('wpdl_language');
+                
+                addResult('✅ Onboarding zurückgesetzt', 'success');
+                addResult('🔄 Lade die App neu um den Welcome-Screen zu sehen');
+                
+            } catch (error) {
+                addResult(`❌ Fehler beim Reset: ${error.message}`, 'error');
+            }
+        }
+        
+        function createTestData() {
+            clearResults();
+            
+            try {
+                // Test-Daten erstellen
+                localStorage.setItem('wpdl_employee_name', 'Max Mustermann');
+                localStorage.setItem('wpdl_consent', 'true');
+                localStorage.setItem('wpdl_language', 'de');
+                
+                // Test-Wochendaten
+                const testWeek = {
+                    year: 2024,
+                    week: 42,
+                    employeeName: 'Max Mustermann',
+                    customer: 'Test-Projekt',
+                    days: [
+                        { date: '2024-10-14', from: '08:00', to: '16:00', pause1From: '12:00', pause1To: '13:00', pause2From: '', pause2To: '', hours: '07:00', decimal: '7.00' },
+                        { date: '2024-10-15', from: '08:00', to: '16:00', pause1From: '12:00', pause1To: '13:00', pause2From: '', pause2To: '', hours: '07:00', decimal: '7.00' },
+                        { date: '2024-10-16', from: '08:00', to: '16:00', pause1From: '12:00', pause1To: '13:00', pause2From: '', pause2To: '', hours: '07:00', decimal: '7.00' },
+                        { date: '2024-10-17', from: '08:00', to: '16:00', pause1From: '12:00', pause1To: '13:00', pause2From: '', pause2To: '', hours: '07:00', decimal: '7.00' },
+                        { date: '2024-10-18', from: '08:00', to: '16:00', pause1From: '12:00', pause1To: '13:00', pause2From: '', pause2To: '', hours: '07:00', decimal: '7.00' },
+                        { date: '2024-10-19', from: '', to: '', pause1From: '', pause1To: '', pause2From: '', pause2To: '', hours: '00:00', decimal: '0.00' },
+                        { date: '2024-10-20', from: '', to: '', pause1From: '', pause1To: '', pause2From: '', pause2To: '', hours: '00:00', decimal: '0.00' }
+                    ]
+                };
+                
+                localStorage.setItem('wpdl_week_2024_42', JSON.stringify(testWeek));
+                
+                addResult('✅ Test-Daten erstellt', 'success');
+                addResult('👤 Benutzer: Max Mustermann<br>📅 Testwoche: KW 42/2024<br>⏰ 5 Arbeitstage à 7 Stunden');
+                
+            } catch (error) {
+                addResult(`❌ Fehler beim Erstellen: ${error.message}`, 'error');
+            }
+        }
+        
+        // Automatische Prüfung beim Laden
+        window.onload = function() {
+            addResult('🛠️ Debug-Tool geladen. Klicken Sie auf "Status prüfen" um zu beginnen.');
+        };
+    </script>
+</body>
+</html>

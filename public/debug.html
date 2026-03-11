@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug: Stundenberechnung</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .test-case { border: 1px solid #e5e7eb; margin: 15px 0; padding: 15px; border-radius: 6px; }
+        .result { font-weight: bold; color: #059669; }
+        .error { color: #dc2626; }
+        .success { background: #f0fdf4; border-color: #bbf7d0; }
+        .fail { background: #fef2f2; border-color: #fecaca; }
+        h1 { color: #1f2937; }
+        h2 { color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Debug: Stundenberechnung Test</h1>
+        <p>Prüfung der timeUtils-Funktionen für verschiedene Sprach-Einstellungen</p>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // Kopie der timeUtils Funktionen aus storage.ts
+        const timeUtils = {
+            timeToMinutes: (timeString) => {
+                if (!timeString || !timeString.includes(':')) return 0;
+                const [hours, minutes] = timeString.split(':').map(Number);
+                return (hours || 0) * 60 + (minutes || 0);
+            },
+
+            minutesToTime: (minutes) => {
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+            },
+
+            calculateWorkHours: (from, to, pause1From, pause1To, pause2From, pause2To) => {
+                const fromMin = timeUtils.timeToMinutes(from);
+                const toMin = timeUtils.timeToMinutes(to);
+                
+                const pause1 = pause1From && pause1To ? 
+                    timeUtils.timeToMinutes(pause1To) - timeUtils.timeToMinutes(pause1From) : 0;
+                const pause2 = pause2From && pause2To ? 
+                    timeUtils.timeToMinutes(pause2To) - timeUtils.timeToMinutes(pause2From) : 0;
+                
+                let totalMinutes = toMin - fromMin - pause1 - pause2;
+                if (totalMinutes < 0) totalMinutes = 0;
+                
+                return {
+                    hours: timeUtils.minutesToTime(totalMinutes),
+                    decimal: (totalMinutes / 60).toFixed(2)
+                };
+            }
+        };
+
+        // Test verschiedene Arbeitszeiten
+        const tests = [
+            { name: "Standard 8h Tag", from: "08:00", to: "16:00", p1f: "12:00", p1t: "13:00", exp: "07:00" },
+            { name: "Überstunden", from: "07:00", to: "18:00", p1f: "12:00", p1t: "13:00", exp: "10:00" },
+            { name: "Halbtag", from: "08:00", to: "12:00", p1f: "", p1t: "", exp: "04:00" },
+            { name: "Nachtschicht", from: "22:00", to: "06:00", p1f: "", p1t: "", exp: "00:00" }
+        ];
+
+        function runTest() {
+            const div = document.getElementById('results');
+            let html = '<h2>📊 Berechnungs-Tests</h2>';
+            
+            tests.forEach((test, i) => {
+                const result = timeUtils.calculateWorkHours(test.from, test.to, test.p1f, test.p1t, "", "");
+                const passed = result.hours === test.exp;
+                
+                html += `
+                    <div class="test-case ${passed ? 'success' : 'fail'}">
+                        <h3>${i+1}. ${test.name}</h3>
+                        <p><strong>Arbeitszeit:</strong> ${test.from} - ${test.to}</p>
+                        ${test.p1f ? `<p><strong>Pause:</strong> ${test.p1f} - ${test.p1t}</p>` : ''}
+                        <p class="result">
+                            Ergebnis: ${result.hours} (${result.decimal}h) ${passed ? '✅' : '❌'}
+                        </p>
+                        ${!passed ? `<p class="error">Erwartet: ${test.exp}</p>` : ''}
+                    </div>
+                `;
+            });
+
+            // Formatierungs-Test
+            html += `
+                <h2>🌍 Internationalisierung</h2>
+                <div class="test-case">
+                    <h3>Dezimalformat in verschiedenen Sprachen</h3>
+                    <p><strong>7.5 Stunden - Anzeigeformat:</strong></p>
+                    <ul>
+                        <li>🇩🇪 Deutsch: 7,50h</li>
+                        <li>🇺🇸 English: 7.50h</li>
+                        <li>🇫🇷 Français: 7,50h</li>
+                    </ul>
+                    <p class="result">✅ Die App sollte das Format je nach gewählter Sprache anpassen</p>
+                </div>
+                
+                <div class="test-case">
+                    <h3>Mögliche Ursachen für englische Probleme:</h3>
+                    <ul>
+                        <li>🔍 Zeitformat-Parsing unterschiedlich</li>
+                        <li>🔍 Dezimaltrennzeichen (Punkt vs. Komma)</li>
+                        <li>🔍 Lokalisierte Datumsformate</li>
+                        <li>🔍 Browser-spezifische Unterschiede</li>
+                    </ul>
+                    <p><strong>Nächste Schritte:</strong> Test in der echten App mit englischer Sprache</p>
+                </div>
+            `;
+
+            div.innerHTML = html;
+        }
+
+        runTest();
+    </script>
+</body>
+</html>

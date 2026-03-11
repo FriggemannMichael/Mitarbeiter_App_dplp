@@ -1,0 +1,42 @@
+{
+    "customer": {
+        "company_name": "O'Reilly's Test-Firma GmbH",
+        "company_address": "Test's Straße 123",
+        "company_phone": "+49123456789",
+        "company_email": "info@test.de",
+        "primary_color": "#ff0000",
+        "theme_color": "#ff0000"
+    },
+    "contact": {
+        "default_email": "info@test.de",
+        "default_whatsapp": "+49123456789",
+        "allowed_emails": [
+            "info@test.de"
+        ],
+        "allowed_whatsapp": [
+            "+49123456789"
+        ]
+    },
+    "email": {
+        "smtp_host": "smtp.test.de",
+        "smtp_port": 587,
+        "smtp_encryption": "tls",
+        "smtp_username": "user@test.de",
+        "smtp_password": "Pass'word\"123",
+        "from_email": "info@test.de",
+        "from_name": "O'Reilly Test"
+    },
+    "technical": {
+        "api_endpoint": "https://test-api.de/backend",
+        "deployment_path": "/",
+        "pwa_qr_code_url": "https://test.de",
+        "app_domain": "https://test.de",
+        "backend_domain": "https://test.de",
+        "cors_allowed_origins": [
+            "https://test.de"
+        ]
+    },
+    "logo": {
+        "path": "assets/logo.png"
+    }
+}

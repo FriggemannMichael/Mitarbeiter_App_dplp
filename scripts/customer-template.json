@@ -1,0 +1,43 @@
+{
+    "customer": {
+        "company_name": "TEMPLATE: Firmenname",
+        "company_address": "TEMPLATE: Adresse",
+        "company_phone": "TEMPLATE: +49123456789",
+        "company_email": "TEMPLATE: info@firma.de",
+        "primary_color": "#2563eb",
+        "theme_color": "#2563eb"
+    },
+    "contact": {
+        "allowed_emails": [
+            "info@firma.de"
+        ],
+        "allowed_whatsapp": [
+            "+49123456789"
+        ],
+        "default_email": "info@firma.de",
+        "default_whatsapp": "+49123456789"
+    },
+    "email": {
+        "smtp_host": "smtp.example.com",
+        "smtp_port": 587,
+        "smtp_encryption": "tls",
+        "smtp_username": "info@firma.de",
+        "smtp_password": "",
+        "from_email": "info@firma.de",
+        "from_name": "Zeiterfassung App"
+    },
+    "technical": {
+        "api_endpoint": "https://example.com/backend",
+        "deployment_path": "/",
+        "app_domain": "https://example.com",
+        "backend_domain": "https://example.com",
+        "pwa_qr_code_url": "https://example.com",
+        "cors_allowed_origins": [
+            "https://example.com"
+        ]
+    },
+    "logo": {
+        "path": "assets/logo-firma.png",
+        "source_file": ""
+    }
+}
