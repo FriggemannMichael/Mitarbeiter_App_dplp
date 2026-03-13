@@ -50,7 +50,8 @@ export default defineConfig(() => {
       VitePWA({
         registerType: "autoUpdate",
         workbox: {
-          globPatterns: [], // Keine passenden Dateien im dev-dist, daher leer lassen
+          // Preview/Production muessen index.html und Assets precachen koennen.
+          globPatterns: ["**/*.{html,js,css,ico,png,svg,webmanifest}"],
           navigateFallback: "index.html",
           navigateFallbackDenylist: [/^\/api/, /^\/debug/],
           runtimeCaching: [

@@ -1,0 +1,62 @@
+{
+  "company": {
+    "company_name": "DPL Professionals GmbH",
+    "company_address": "Carl-Benz-Straße 27, 48734 Reken",
+    "company_phone": "0 28 64/95 18 13-0",
+    "company_email": "info@dplp.de",
+    "company_logo": "",
+    "primary_color": "#1976d2",
+    "theme_color": "#1976d2",
+    "allowed_emails": [
+      "info@dplp.de"
+    ],
+    "allowed_whatsapp": [],
+    "default_email": "info@dplp.de",
+    "default_whatsapp": ""
+  },
+  "pdf": {
+    "app_name": "DPL Professionals GmbH-Mitarbeiter",
+    "app_short_name": "Mitarbeiter Pro",
+    "pdf_title_prefix": "Stundennachweis",
+    "pdf_author": "DPL Professionals GmbH App",
+    "pdf_footer_text": "Erstellt mit Mitarbeiter Pro App - DSGVO-konform",
+    "timesheet_header": "STUNDENNACHWEIS",
+    "advance_payment_header": "VORSCHUSSANTRAG",
+    "vacation_header": "URLAUBSANTRAG",
+    "signature_label": "Vorgesetzter",
+    "legal_notice_timesheet": "",
+    "legal_notice_advance_payment": "",
+    "legal_notice_vacation": "",
+    "qr_code_app_identifier": "Mitarbeiter Pro"
+  },
+  "technical": {
+    "customer_key": "dplp",
+    "api_endpoint": "/backend",
+    "deployment_path": "/",
+    "qr_code_type_timesheet": "TIMESHEET",
+    "qr_code_type_vacation": "VACATION_REQUEST",
+    "qr_code_type_advance_payment": "ADVANCE_PAYMENT",
+    "enable_whatsapp": true,
+    "enable_email": true,
+    "pwa_qr_code_url": "https://www.ze.dplp.de",
+    "app_domain": "https://www.ze.dplp.de",
+    "backend_domain": "https://www.ze.dplp.de",
+    "whatsapp_base_url": "https://wa.me/",
+    "cors_allowed_origins": [
+      "https://www.ze.dplp.de"
+    ]
+  },
+  "work": {
+    "max_work_hours_per_day": 12,
+    "default_break_minutes": 60,
+    "filename_pattern": "Stundennachweis_{employeeName}_{weekYear}_KW{weekNumber}",
+    "auto_save_enabled": true,
+    "offline_mode_enabled": true,
+    "auto_logout_minutes": 240,
+    "backup_reminder_days": 7,
+    "enable_signature_requirement": true,
+    "enable_photo_upload": false,
+    "date_format": "DD.MM.YYYY",
+    "time_format": "HH:mm"
+  }
+}
