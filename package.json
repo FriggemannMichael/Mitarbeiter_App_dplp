@@ -23,7 +23,8 @@
     "setup:customer": "node ./scripts/setup-customer.js",
     "customer:create": "node ./scripts/create-customer-profile.js",
     "build:customer": "node ./scripts/build-customer.js",
-    "dev:customer": "node ./scripts/dev-customer.js"
+    "dev:customer": "node ./scripts/dev-customer.js",
+    "preview:customer:local": "node ./scripts/preview-customer-local.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
