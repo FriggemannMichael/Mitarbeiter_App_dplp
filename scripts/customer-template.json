@@ -27,6 +27,7 @@
         "from_name": "Zeiterfassung App"
     },
     "technical": {
+        "customer_key": "example-customer",
         "api_endpoint": "https://example.com/backend",
         "deployment_path": "/",
         "app_domain": "https://example.com",

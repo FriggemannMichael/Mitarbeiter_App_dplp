@@ -1,0 +1,25 @@
+# Sensible Dateien – dürfen NICHT ins Image
+.env
+.env.app
+.env.docker
+*.env
+DEV_CREDENTIALS.md
+cookies.txt
+data/
+
+# Python-Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Entwicklung
+.git/
+.gitignore
+*.md
+!requirements.txt
+
+# Tests / Dev-Tools
+pyrightconfig.json
+migrate_sqlite.py

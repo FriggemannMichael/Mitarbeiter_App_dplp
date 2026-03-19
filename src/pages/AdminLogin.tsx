@@ -15,7 +15,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   const companyConfig = useCompanyConfig();
-  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.svg`;
+  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.png`;
   const logoSrc = companyConfig.company_logo || defaultLogoSrc;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -91,7 +91,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
           <img
             src={logoSrc}
             alt="Logo"
-            className="h-16 w-auto mx-auto mb-4"
+            className="h-24 w-auto mx-auto mb-4"
           />
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-8 h-8 text-primary" />

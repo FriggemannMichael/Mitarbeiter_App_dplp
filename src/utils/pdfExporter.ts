@@ -7,6 +7,34 @@ import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
 export class PdfExporter {
+  private static dataUrlToBytes(dataUrl: string): Uint8Array {
+    const [, base64 = ""] = dataUrl.split(",", 2);
+    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  }
+
+  private static async loadLogoBytes(logoUrl: string): Promise<{
+    logoBytes: Uint8Array | ArrayBuffer;
+    contentType: string;
+  }> {
+    if (logoUrl.startsWith("data:")) {
+      const contentType = logoUrl.slice(5, logoUrl.indexOf(";")) || "image/png";
+      const logoBytes = this.dataUrlToBytes(logoUrl);
+      return { logoBytes, contentType };
+    }
+
+    const absoluteLogoUrl =
+      logoUrl.startsWith("http://") ||
+      logoUrl.startsWith("https://") ||
+      logoUrl.startsWith("blob:")
+        ? logoUrl
+        : new URL(logoUrl, window.location.href).toString();
+
+    const logoResponse = await fetch(absoluteLogoUrl);
+    const logoBytes = await logoResponse.arrayBuffer();
+    const contentType = logoResponse.headers.get("content-type") || "";
+    return { logoBytes, contentType };
+  }
+
   private static getAbsenceLabel(absence?: string | null): string {
     const labels: Record<string, string> = {
       sick: "Krank",
@@ -24,9 +52,11 @@ export class PdfExporter {
   }
 
   private static async convertSvgToPngBytes(
-    svgBytes: ArrayBuffer,
+    svgBytes: Uint8Array | ArrayBuffer,
   ): Promise<Uint8Array> {
-    const blob = new Blob([svgBytes], { type: "image/svg+xml" });
+    const normalizedBytes =
+      svgBytes instanceof Uint8Array ? new Uint8Array(svgBytes) : new Uint8Array(svgBytes);
+    const blob = new Blob([normalizedBytes], { type: "image/svg+xml" });
     const objectUrl = URL.createObjectURL(blob);
 
     try {
@@ -63,7 +93,7 @@ export class PdfExporter {
 
   private static async embedLogoImage(
     pdfDoc: PDFDocument,
-    logoBytes: ArrayBuffer,
+    logoBytes: Uint8Array | ArrayBuffer,
     logoUrl: string,
     contentType: string,
   ) {
@@ -171,18 +201,7 @@ export class PdfExporter {
     const logoUrl = config.company.company_logo;
     if (logoUrl) {
       try {
-        // Unterstütze relative und absolute URLs
-        const absoluteLogoUrl =
-          logoUrl.startsWith("data:") ||
-          logoUrl.startsWith("http://") ||
-          logoUrl.startsWith("https://") ||
-          logoUrl.startsWith("blob:")
-            ? logoUrl
-            : new URL(logoUrl, window.location.href).toString();
-
-        const logoResponse = await fetch(absoluteLogoUrl);
-        const logoBytes = await logoResponse.arrayBuffer();
-        const contentType = logoResponse.headers.get("content-type") || "";
+        const { logoBytes, contentType } = await this.loadLogoBytes(logoUrl);
         const logoImage = await this.embedLogoImage(
           pdfDoc,
           logoBytes,

@@ -57,6 +57,8 @@ const customerId = slugify(idArgRaw || config.customer?.company_name);
 if (!customerId) {
   fail("Could not derive a valid customer id.");
 }
+const customerKeyRaw = config.technical?.customer_key || customerId;
+const customerKey = slugify(customerKeyRaw) || customerId;
 
 const customerPublicDir = path.resolve("public", "customers", customerId);
 const profileConfigPath = path.join(customerPublicDir, "config.json");
@@ -121,6 +123,7 @@ const publicConfig = {
     qr_code_app_identifier: "Mitarbeiter Pro",
   },
   technical: {
+    customer_key: customerKey,
     api_endpoint: config.technical.api_endpoint,
     deployment_path: config.technical.deployment_path,
     qr_code_type_timesheet: "TIMESHEET",
@@ -162,6 +165,7 @@ const frontendEnv = [
   `VITE_CONFIG_PATH=customers/${customerId}/config.json`,
   `VITE_COMPANY_CODE=${companyCode}`,
   `VITE_EXPECTED_CODE=${companyCode}`,
+  `VITE_CUSTOMER_KEY=${customerKey}`,
   `VITE_SKIP_API=${config.technical?.skip_api === true ? "true" : "false"}`,
   "",
 ].join("\n");
@@ -169,6 +173,7 @@ const frontendEnv = [
 const backendEnvTemplate = [
   `# Backend env template for customer: ${customerId}`,
   `# Copy values to your server-side env file (do not commit secrets).`,
+  `CUSTOMER_KEY=${customerKey}`,
   `SMTP_HOST=${config.email.smtp_host || ""}`,
   `SMTP_PORT=${config.email.smtp_port || 587}`,
   `SMTP_ENCRYPTION=${config.email.smtp_encryption || "tls"}`,

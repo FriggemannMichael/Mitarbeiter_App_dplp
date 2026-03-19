@@ -1,23 +1,23 @@
 {
-  "name": "Mitarbeiter App",
-  "short_name": "Mitarbeiter",
-  "description": "Zeiterfassung • Urlaub • Abwesenheit",
-  "theme_color": "#1976d2",
+  "name": "DPL Professionals GmbH",
+  "short_name": "DPL Pro",
+  "description": "DPL Professionals GmbH – Zeiterfassung • Urlaub • Abwesenheit",
+  "theme_color": "#212f61",
   "background_color": "#ffffff",
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
   "icons": [
     {
-      "src": "logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],

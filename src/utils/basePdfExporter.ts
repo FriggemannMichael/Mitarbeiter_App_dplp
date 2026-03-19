@@ -7,10 +7,40 @@ import { AppConfiguration } from "../types/config.types";
  * Consolidates common PDF generation logic to reduce duplication
  */
 export abstract class BasePdfExporter {
+  private static dataUrlToBytes(dataUrl: string): Uint8Array {
+    const [, base64 = ""] = dataUrl.split(",", 2);
+    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  }
+
+  protected static async loadLogoBytes(logoUrl: string): Promise<{
+    logoBytes: Uint8Array | ArrayBuffer;
+    contentType: string;
+  }> {
+    if (logoUrl.startsWith("data:")) {
+      const contentType = logoUrl.slice(5, logoUrl.indexOf(";")) || "image/png";
+      const logoBytes = this.dataUrlToBytes(logoUrl);
+      return { logoBytes, contentType };
+    }
+
+    const absoluteLogoUrl =
+      logoUrl.startsWith("http://") ||
+      logoUrl.startsWith("https://") ||
+      logoUrl.startsWith("blob:")
+        ? logoUrl
+        : new URL(logoUrl, window.location.href).toString();
+
+    const logoResponse = await fetch(absoluteLogoUrl);
+    const logoBytes = await logoResponse.arrayBuffer();
+    const contentType = logoResponse.headers.get("content-type") || "";
+    return { logoBytes, contentType };
+  }
+
   private static async convertSvgToPngBytes(
-    svgBytes: ArrayBuffer,
+    svgBytes: Uint8Array | ArrayBuffer,
   ): Promise<Uint8Array> {
-    const blob = new Blob([svgBytes], { type: "image/svg+xml" });
+    const normalizedBytes =
+      svgBytes instanceof Uint8Array ? new Uint8Array(svgBytes) : new Uint8Array(svgBytes);
+    const blob = new Blob([normalizedBytes], { type: "image/svg+xml" });
     const objectUrl = URL.createObjectURL(blob);
 
     try {
@@ -47,7 +77,7 @@ export abstract class BasePdfExporter {
 
   protected static async embedLogoImage(
     pdfDoc: PDFDocument,
-    logoBytes: ArrayBuffer,
+    logoBytes: Uint8Array | ArrayBuffer,
     logoUrl: string,
     contentType: string,
   ) {
@@ -128,18 +158,8 @@ export abstract class BasePdfExporter {
     const logoUrl = config.company.company_logo;
     if (!logoUrl) return yPosition;
 
-    const absoluteLogoUrl =
-      logoUrl.startsWith("data:") ||
-      logoUrl.startsWith("http://") ||
-      logoUrl.startsWith("https://") ||
-      logoUrl.startsWith("blob:")
-        ? logoUrl
-        : new URL(logoUrl, window.location.href).toString();
-    const logoResponse = await fetch(absoluteLogoUrl);
-
     try {
-      const logoBytes = await logoResponse.arrayBuffer();
-      const contentType = logoResponse.headers.get("content-type") || "";
+      const { logoBytes, contentType } = await this.loadLogoBytes(logoUrl);
       const logoImage = await this.embedLogoImage(
         pdfDoc,
         logoBytes,

@@ -12,6 +12,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Non-root user für Produktion
+RUN useradd --no-create-home --shell /bin/false appuser \
+    && chown -R appuser:appuser /app \
+    && chmod +x /app/entrypoint.sh
+USER appuser
+
 EXPOSE 8000
 
-CMD ["gunicorn", "mitarbeiterapp.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60"]
+ENTRYPOINT ["/app/entrypoint.sh"]

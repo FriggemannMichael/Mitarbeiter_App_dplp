@@ -132,17 +132,21 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         }
 
         if (result.success) {
+          const resultData = result.data || {};
           // Backend sendet automatisch Kopie an Kunden wenn customer_email vorhanden
           let successMessage = "✅ E-Mail erfolgreich versendet!";
-          if (result.customer_email_sent) {
+          if (resultData.customer_email_sent) {
             successMessage +=
-              "\n✅ Kopie an Kunde gesendet: " + result.customer_email;
+              "\n✅ Kopie an Kunde gesendet: " + resultData.customer_email;
           } else if (
             customerEmail &&
             customerEmail.trim() &&
-            !result.customer_email_sent
+            !resultData.customer_email_sent
           ) {
             successMessage += "\nⓘ Kopie an Kunde fehlgeschlagen";
+            if (resultData.customer_email_error) {
+              successMessage += `\n${resultData.customer_email_error}`;
+            }
           }
 
           setSuccess(true);

@@ -1,0 +1,42 @@
+{
+  "customer": {
+    "company_name": "DPL Professionals GmbH",
+    "company_address": "Carl-Benz-Straße 27, 48734 Reken",
+    "company_phone": "0 28 64/95 18 13-0",
+    "company_email": "info@dplp.de",
+    "primary_color": "#1976d2",
+    "theme_color": "#1976d2"
+  },
+  "contact": {
+    "allowed_emails": [
+      "info@dplp.de"
+    ],
+    "allowed_whatsapp": [],
+    "default_email": "info@dplp.de",
+    "default_whatsapp": ""
+  },
+  "email": {
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_encryption": "tls",
+    "smtp_username": "info@dplp.de",
+    "smtp_password": "",
+    "from_email": "info@dplp.de",
+    "from_name": "DPL Professionals GmbH"
+  },
+  "technical": {
+    "customer_key": "dplp",
+    "api_endpoint": "/backend",
+    "deployment_path": "/",
+    "app_domain": "https://www.ze.dplp.de",
+    "backend_domain": "https://www.ze.dplp.de",
+    "pwa_qr_code_url": "https://www.ze.dplp.de",
+    "cors_allowed_origins": [
+      "https://www.ze.dplp.de"
+    ]
+  },
+  "logo": {
+    "path": "",
+    "source_file": ""
+  }
+}

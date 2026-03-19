@@ -1,17 +1,15 @@
 {
   "company": {
-    "company_name": "DPL Professionals GmbH",
-    "company_address": "Gerichtsstraße 1, 46236 Bottrop",
-    "company_phone": "0 20 41/77 98 7-0",
-    "company_email": "info@dplp.de",
+    "company_name": "Ihre Firma GmbH",
+    "company_address": "Musterstraße 1, 12345 Musterstadt",
+    "company_phone": "+49 000 000000",
+    "company_email": "info@ihre-firma.de",
     "company_logo": "",
-    "primary_color": "#212f61",
-    "theme_color": "#212f61",
-    "allowed_emails": [
-      "info@dplp.de"
-    ],
+    "primary_color": "#1976d2",
+    "theme_color": "#1976d2",
+    "allowed_emails": [],
     "allowed_whatsapp": [],
-    "default_email": "info@dplp.de",
+    "default_email": "",
     "default_whatsapp": ""
   },
   "pdf": {
@@ -38,13 +36,11 @@
     "qr_code_type_vacation": "VACATION_REQUEST",
     "enable_whatsapp": false,
     "enable_email": true,
-    "pwa_qr_code_url": "https://ze.dplp.de",
-    "app_domain": "https://ze.dplp.de",
-    "backend_domain": "https://ze.dplp.de",
+    "pwa_qr_code_url": "",
+    "app_domain": "",
+    "backend_domain": "",
     "whatsapp_base_url": "https://wa.me/",
-    "cors_allowed_origins": [
-      "https://ze.dplp.de"
-    ],
+    "cors_allowed_origins": [],
     "pdf_api_key": "",
     "feature_flags": {}
   },

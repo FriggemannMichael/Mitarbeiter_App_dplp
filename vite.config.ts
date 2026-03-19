@@ -50,7 +50,8 @@ export default defineConfig(() => {
       VitePWA({
         registerType: "autoUpdate",
         workbox: {
-          globPatterns: [], // Keine passenden Dateien im dev-dist, daher leer lassen
+          // Preview/Production muessen index.html und Assets precachen koennen.
+          globPatterns: ["**/*.{html,js,css,ico,png,svg,webmanifest}"],
           navigateFallback: "index.html",
           navigateFallbackDenylist: [/^\/api/, /^\/debug/],
           runtimeCaching: [
@@ -70,21 +71,27 @@ export default defineConfig(() => {
             },
           ],
         },
-        includeAssets: ["favicon.ico", "logo.svg"],
+        includeAssets: ["favicon.ico", "logo.png"],
         manifest: {
-          name: "Mitarbeiter App",
-          short_name: "Mitarbeiter",
+          name: "DPL Professionals GmbH",
+          short_name: "DPL Pro",
           description: "Mobile Stundennachweis-App f\u00fcr Mitarbeiter",
-          theme_color: "#1976d2",
+          theme_color: "#212f61",
           background_color: "#ffffff",
           display: "standalone",
           scope: "/",
           start_url: "/",
           icons: [
             {
-              src: "/logo.svg",
-              sizes: "any",
-              type: "image/svg+xml",
+              src: "/pwa-192x192.png",
+              sizes: "192x192",
+              type: "image/png",
+              purpose: "any",
+            },
+            {
+              src: "/pwa-512x512.png",
+              sizes: "512x512",
+              type: "image/png",
               purpose: "any maskable",
             },
           ],
