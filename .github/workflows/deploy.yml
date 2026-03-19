@@ -59,6 +59,7 @@ jobs:
         env:
           VITE_FORCE_API: true
           VITE_API_URL: ${{ secrets.API_URL }}
+          VITE_COMPANY_CODE: TIMESHEET-PRO-2026
 
       - name: Deploy dist/ via FTP
         run: |
