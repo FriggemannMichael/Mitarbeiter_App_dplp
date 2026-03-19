@@ -4,6 +4,9 @@ set -e
 echo "Running migrations..."
 python manage.py migrate --noinput
 
+echo "Seeding initial config..."
+python manage.py seed_config
+
 echo "Starting gunicorn..."
 exec gunicorn mitarbeiterapp.wsgi:application \
     --bind 0.0.0.0:8000 \

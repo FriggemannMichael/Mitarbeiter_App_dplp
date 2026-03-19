@@ -30,7 +30,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
   const companyConfig = useCompanyConfig();
   const pdfConfig = usePdfConfig();
   const { config } = useConfig();
-  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.svg`;
+  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.png`;
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -151,7 +151,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                 <img
                   src={companyConfig.company_logo || defaultLogoSrc}
                   alt={companyConfig.company_name || "Firma"}
-                  className="h-20 w-auto rounded-xl shadow-sm"
+                  className="h-28 w-auto rounded-xl shadow-sm"
                 />
               </motion.div>
               <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
