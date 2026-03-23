@@ -30,8 +30,8 @@
     "qr_code_app_identifier": "Mitarbeiter App"
   },
   "technical": {
-    "customer_key": "default",
-    "api_endpoint": "/backend",
+    "customer_key": "dplp",
+    "api_endpoint": "https://ze-api.mitarbeiterapp.site",
     "deployment_path": "/",
     "qr_code_type_timesheet": "TIMESHEET",
     "qr_code_type_advance_payment": "ADVANCE_PAYMENT",
@@ -40,7 +40,7 @@
     "enable_email": true,
     "pwa_qr_code_url": "https://ze.dplp.de",
     "app_domain": "https://ze.dplp.de",
-    "backend_domain": "https://ze.dplp.de",
+    "backend_domain": "https://ze-api.mitarbeiterapp.site",
     "whatsapp_base_url": "https://wa.me/",
     "cors_allowed_origins": [
       "https://ze.dplp.de"

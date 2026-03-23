@@ -31,7 +31,7 @@
   },
   "technical": {
     "customer_key": "dplp",
-    "api_endpoint": "/backend",
+    "api_endpoint": "https://ze-api.mitarbeiterapp.site",
     "deployment_path": "/",
     "qr_code_type_timesheet": "TIMESHEET",
     "qr_code_type_vacation": "VACATION_REQUEST",
@@ -40,7 +40,7 @@
     "enable_email": true,
     "pwa_qr_code_url": "https://www.ze.dplp.de",
     "app_domain": "https://www.ze.dplp.de",
-    "backend_domain": "https://www.ze.dplp.de",
+    "backend_domain": "https://ze-api.mitarbeiterapp.site",
     "whatsapp_base_url": "https://wa.me/",
     "cors_allowed_origins": [
       "https://www.ze.dplp.de"
