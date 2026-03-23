@@ -45,6 +45,12 @@ import { useTimeCalculation } from "./TimeCalculationContext";
 import { useSignatureWorkflow } from "./SignatureWorkflowContext";
 import { useShiftConfig, type ShiftConfig } from "./ShiftConfigContext";
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 interface WeekDataContextType {
   // State
   currentWeek: WeekData | null;
@@ -637,7 +643,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const weekToSave = saveWeekData(updatedWeek);
         setCurrentWeek(weekToSave);
 
-        console.log(`[WeekDataContext] Unterschrift (${type}) gespeichert`);
+        devLog(`[WeekDataContext] Unterschrift (${type}) gespeichert`);
       } catch (error) {
         console.error("Fehler beim Unterschreiben:", error);
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
@@ -666,7 +672,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const weekToSave = saveWeekData(updatedWeek);
         setCurrentWeek(weekToSave);
 
-        console.log(`[WeekDataContext] Unterschrift (${type}) gelöscht`);
+        devLog(`[WeekDataContext] Unterschrift (${type}) gelöscht`);
       } catch (error) {
         console.error("Fehler beim Löschen der Unterschrift:", error);
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
@@ -950,7 +956,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const loadInitialWeek = async () => {
       const systemWeek = weekUtils.getCurrentWeek();
-      console.log("[WeekDataContext] Initial Load - System-Woche:", systemWeek);
+      devLog("[WeekDataContext] Initial Load - System-Woche:", systemWeek);
       setCurrentWeekInfo(systemWeek);
       await loadWeek(systemWeek.year, systemWeek.week, 1);
     };

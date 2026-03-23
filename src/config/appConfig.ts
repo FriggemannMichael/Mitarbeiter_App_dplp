@@ -7,6 +7,12 @@ const COMPANY_CODE = import.meta.env.VITE_COMPANY_CODE;
 const EXPECTED_CODE =
   import.meta.env.VITE_EXPECTED_CODE || "TIMESHEET-PRO-2026";
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 if (COMPANY_CODE !== EXPECTED_CODE) {
   throw new Error("Unauthorized: Invalid company configuration");
 }
@@ -148,7 +154,7 @@ export const appConfig: AppConfig = {
       }
 
       // Hier könnten Konfigurationsänderungen implementiert werden
-      console.log(
+      devLog(
         "Admin access granted - configuration update requested:",
         Object.keys(newConfig),
       );
