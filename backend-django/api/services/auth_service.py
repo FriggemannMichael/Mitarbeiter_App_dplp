@@ -164,7 +164,13 @@ def verify_jwt_token(token: str) -> dict | None:
 
 
 def get_token_from_request(request) -> str | None:
-    """Liest JWT aus Cookie (credentials: include im Frontend)."""
+    """Liest JWT aus Authorization-Header oder Cookie."""
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+
     return request.COOKIES.get(JWT_COOKIE_NAME)
 
 
@@ -209,12 +215,12 @@ def require_roles(*allowed_roles: str):
 
 
 def set_jwt_cookie(response, token: str):
-    """Setzt JWT als HTTP-only Cookie."""
+    """Setzt JWT als HTTP-only Cookie fuer Cross-Site-Frontend/API-Setup."""
     response.set_cookie(
         key=JWT_COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite='Lax',
+        samesite='None',
         secure=JWT_COOKIE_SECURE,
         max_age=JWT_EXPIRE_HOURS * 3600,
         path='/',
@@ -225,6 +231,6 @@ def delete_jwt_cookie(response):
     """Loescht JWT Cookie beim Logout."""
     response.delete_cookie(
         key=JWT_COOKIE_NAME,
-        samesite='Lax',
+        samesite='None',
         path='/',
     )

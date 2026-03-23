@@ -36,6 +36,7 @@ interface LoginResponse {
   email: string;
   role?: string;
   customer_key?: string;
+  token?: string;
 }
 
 export interface AccountDto {
@@ -51,10 +52,15 @@ export interface AccountDto {
 class ApiService {
   private baseUrl: string;
   private customerKey: string;
+  private authToken: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
     this.customerKey = import.meta.env.VITE_CUSTOMER_KEY || "";
+    this.authToken =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("admin_auth_token") || ""
+        : "";
   }
 
   setBaseUrl(baseUrl: string): void {
@@ -77,6 +83,10 @@ class ApiService {
     this.customerKey = (customerKey || "").trim();
   }
 
+  setAuthToken(token: string): void {
+    this.authToken = (token || "").trim();
+  }
+
   /**
    * Generische API-Anfrage mit Error-Handling
    */
@@ -94,6 +104,9 @@ class ApiService {
     };
     if (this.customerKey) {
       (defaultHeaders as Record<string, string>)["X-Customer-Key"] = this.customerKey;
+    }
+    if (this.authToken) {
+      (defaultHeaders as Record<string, string>)["Authorization"] = `Bearer ${this.authToken}`;
     }
 
     const config: RequestInit = {
