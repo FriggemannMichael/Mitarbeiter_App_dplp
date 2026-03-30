@@ -486,6 +486,30 @@ export class PdfExporter {
       yPosition -= 100;
     }
 
+    // Leeres Kundenunterschriftsfeld – Kunde bestätigt und leitet weiter
+    yPosition -= 20;
+    page.drawText("BESTÄTIGUNG DURCH KUNDEN:", {
+      x: leftMargin,
+      y: yPosition,
+      size: 10,
+      font: helveticaBold,
+      color: black,
+    });
+    yPosition -= 50;
+    page.drawLine({
+      start: { x: leftMargin, y: yPosition },
+      end: { x: leftMargin + 220, y: yPosition },
+      thickness: 1,
+      color: darkGray,
+    });
+    page.drawText("Datum / Unterschrift Kunde", {
+      x: leftMargin,
+      y: yPosition - 14,
+      size: 9,
+      font: helvetica,
+      color: darkGray,
+    });
+
     page.drawText(`Erstellt am: ${new Date().toLocaleDateString("de-DE")}`, {
       x: leftMargin,
       y: 50,

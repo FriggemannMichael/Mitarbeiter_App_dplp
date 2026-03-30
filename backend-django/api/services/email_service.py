@@ -25,6 +25,23 @@ FROM_NAME = os.environ.get('FROM_NAME', 'Mitarbeiter Pro')
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL', '')
 
 
+def _format_smtp_error(exc: Exception) -> str:
+    """Liefert lesbare SMTP-Fehler mit konkreten Hinweisen fuer bekannte Provider."""
+    raw_error = str(exc)
+
+    if '5.7.139' in raw_error and 'SmtpClientAuthentication is disabled for the Tenant' in raw_error:
+        return (
+            'SMTP-Authentifizierung bei Microsoft 365 ist fuer diesen Tenant deaktiviert '
+            '(Fehler 5.7.139). Bitte SMTP AUTH fuer den Tenant oder das betroffene '
+            'Postfach aktivieren oder auf einen anderen Mailversand umstellen.'
+        )
+
+    if 'Authentication unsuccessful' in raw_error:
+        return f'Authentifizierung am SMTP-Server fehlgeschlagen: {raw_error}'
+
+    return raw_error
+
+
 def _create_connection():
     """Erstellt SMTP-Verbindung aus .env (nie aus DB!)."""
     if not SMTP_HOST or not SMTP_USERNAME:
@@ -141,7 +158,7 @@ def send_test_email(recipient: str) -> dict:
             }
         }
     except Exception as e:
-        return {'success': False, 'error': f'SMTP-Fehler: {str(e)}'}
+        return {'success': False, 'error': f'SMTP-Fehler: {_format_smtp_error(e)}'}
 
 
 def send_pdf(params: dict) -> dict:
@@ -163,11 +180,6 @@ def send_pdf(params: dict) -> dict:
         total_hours = params.get('total_hours', '')
         amount = params.get('amount', '')
 
-        subject, body = _generate_email_content(
-            document_type, employee_name, week_number, week_year,
-            date_range, total_hours, amount
-        )
-
         pdf_data = base64.b64decode(pdf_base64)
 
         customer_key = params.get('customer_key', 'default') or 'default'
@@ -177,6 +189,11 @@ def send_pdf(params: dict) -> dict:
         cc_email = (
             db_config.get('technical', {}).get('pdf_review_cc_email', '').strip()
             or db_config.get('company', {}).get('default_email', '').strip()
+        )
+
+        subject, body = _generate_email_content(
+            document_type, employee_name, week_number, week_year,
+            date_range, total_hours, amount, admin_email=cc_email
         )
 
         cc_recipients = []
@@ -261,21 +278,28 @@ def send_pdf(params: dict) -> dict:
             }
         }
     except Exception as e:
-        return {'success': False, 'error': f'Email could not be sent: {str(e)}'}
+        return {'success': False, 'error': f'Email could not be sent: {_format_smtp_error(e)}'}
 
 
 def _generate_email_content(doc_type, employee_name, week_number, week_year,
-                             date_range, total_hours, amount) -> tuple:
-    """Generiert Betreff + Body – identisch zu PHP generateEmailContent()."""
+                             date_range, total_hours, amount, admin_email='') -> tuple:
+    """Generiert Betreff + Body."""
     if doc_type == 'timesheet':
-        subject = f'Stundennachweis - {employee_name}'
-        body = f'Anbei der Stundennachweis von {employee_name}'
+        subject = f'Stundennachweis KW {week_number}/{week_year} – {employee_name}' if week_number and week_year else f'Stundennachweis – {employee_name}'
+        body = f'Sehr geehrte Damen und Herren,\n\n'
+        body += f'anbei erhalten Sie den Stundennachweis von {employee_name}'
         if week_number and week_year:
             body += f' für KW {week_number}/{week_year}'
         if date_range:
             body += f' ({date_range})'
+        body += '.'
         if total_hours:
             body += f'\n\nGesamtstunden: {total_hours}'
+        body += '\n\nWir bitten Sie, den beigefügten Stundennachweis zu prüfen und durch Ihre Unterschrift zu bestätigen.'
+        if admin_email:
+            body += f' Bitte leiten Sie das unterschriebene Dokument anschließend an {admin_email} weiter.'
+        else:
+            body += ' Bitte leiten Sie das unterschriebene Dokument anschließend an die Administration weiter.'
     elif doc_type == 'sick_leave':
         subject = f'Krankmeldung - {employee_name}'
         body = f'Anbei die Krankmeldung von {employee_name}'
