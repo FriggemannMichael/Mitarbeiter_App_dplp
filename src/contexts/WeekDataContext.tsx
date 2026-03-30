@@ -872,29 +872,15 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Monatsübergreifende Tage: Bestimme den "Haupt-Monat" des Sheets
-      // Der Haupt-Monat ist der Monat, in dem die meisten Tage der Woche liegen
+      // Der Haupt-Monat ist der Monat des ersten Wochentags (Montag),
+      // nicht der Monat mit den meisten Tagen – sonst werden die letzten
+      // Märztage in der KW gesperrt, die mit 30./31.03 beginnt.
       const dayDate = new Date(day.date);
       const dayMonth = dayDate.getMonth();
       const dayYear = dayDate.getFullYear();
 
-      // Zähle Tage pro Monat in dieser Woche
-      const monthCounts = new Map<string, number>();
-      currentWeek.days.forEach((d) => {
-        const date = new Date(d.date);
-        const key = `${date.getFullYear()}-${date.getMonth()}`;
-        monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
-      });
-
-      // Finde den Monat mit den meisten Tagen
-      let primaryMonth = "";
-      let maxCount = 0;
-      monthCounts.forEach((count, key) => {
-        if (count > maxCount) {
-          maxCount = count;
-          primaryMonth = key;
-        }
-      });
-
+      const firstDayDate = new Date(currentWeek.days[0].date);
+      const primaryMonth = `${firstDayDate.getFullYear()}-${firstDayDate.getMonth()}`;
       const currentDayKey = `${dayYear}-${dayMonth}`;
 
       // Tag ist nur bearbeitbar, wenn er zum Haupt-Monat gehört
