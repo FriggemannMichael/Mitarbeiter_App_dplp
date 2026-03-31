@@ -874,18 +874,38 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
         onClose={() => setShowMonthEndReminder(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            mx: 2,
+            width: { xs: "calc(100% - 32px)", sm: "100%" },
+          },
+        }}
       >
-        <DialogTitle>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <CalendarIcon color="warning" sx={{ fontSize: 40 }} />
-            <Typography variant="h6">
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="flex-start"
+            sx={{ minWidth: 0 }}
+          >
+            <CalendarIcon
+              color="warning"
+              sx={{ fontSize: 40, flexShrink: 0, mt: 0.25 }}
+            />
+            <Typography
+              variant="h6"
+              sx={{ minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderTitle")}
             </Typography>
           </Stack>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers>
           <Stack spacing={2}>
-            <Typography variant="body1">
+            <Typography
+              variant="body1"
+              sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderMessage", {
                 count: unsignedWeeks.length,
               })}
@@ -908,6 +928,8 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                         key={`${week.year}-${week.week}`}
                         sx={{
                           display: "flex",
+                          flexWrap: "wrap",
+                          gap: 1,
                           justifyContent: "space-between",
                           alignItems: "center",
                           p: 1,
@@ -915,12 +937,19 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                           borderRadius: 1,
                         }}
                       >
-                        <Typography variant="body2">
+                        <Typography
+                          variant="body2"
+                          sx={{ minWidth: 0, flex: "1 1 160px", overflowWrap: "anywhere" }}
+                        >
                           KW {week.week} / {week.year}
                         </Typography>
                         <Button
                           size="small"
                           variant="outlined"
+                          sx={{
+                            flexShrink: 0,
+                            width: { xs: "100%", sm: "auto" },
+                          }}
                           onClick={() => {
                             setWeek(week.year, week.week, 1);
                             setShowMonthEndReminder(false);
@@ -935,17 +964,37 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
               </SectionCard>
             )}
 
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderHint")}
             </Typography>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowMonthEndReminder(false)}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+            pt: 2,
+            gap: 1,
+            flexDirection: { xs: "column-reverse", sm: "row" },
+            alignItems: "stretch",
+            "& > :not(style) ~ :not(style)": {
+              marginLeft: 0,
+            },
+          }}
+        >
+          <Button
+            sx={{ width: { xs: "100%", sm: "auto" } }}
+            onClick={() => setShowMonthEndReminder(false)}
+          >
             {t("backupReminder.remindLater")}
           </Button>
           <Button
             variant="contained"
+            sx={{ width: { xs: "100%", sm: "auto" } }}
             onClick={() => {
               if (unsignedWeeks.length > 0) {
                 setWeek(unsignedWeeks[0].year, unsignedWeeks[0].week, 1);

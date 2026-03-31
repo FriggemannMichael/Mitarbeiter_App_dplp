@@ -12,7 +12,7 @@ import { NotificationProvider } from "../contexts/NotificationContext";
 import { WeekDataProvider } from "../contexts/WeekDataContext";
 import type { AppConfiguration } from "../types/config.types";
 import { configService } from "../services/configService";
-import { storage } from "../utils/storage";
+import { storage, weekUtils, type WeekData } from "../utils/storage";
 import { PdfExporter } from "../utils/pdfExporter";
 
 // Mock MUI Icons to prevent "too many open files" error
@@ -157,12 +157,41 @@ const defaultProps = {
   initialWeek: undefined,
 };
 
+const createFilledWeekData = (year: number, week: number, overrides?: Partial<WeekData>): WeekData => {
+  const weekDays = weekUtils.getWeekDays(year, week);
+
+  return {
+    employeeName: "Max Mustermann",
+    customer: "Test Kunde",
+    customerEmail: "kunde@test.de",
+    week,
+    year,
+    sheetId: 1,
+    startDate: weekDays[0].toISOString(),
+    locked: false,
+    status: "OPEN",
+    days: weekDays.map((date, index) => ({
+      date: date.toISOString(),
+      from: index === 0 ? "08:00" : "",
+      to: index === 0 ? "16:00" : "",
+      pause1From: "",
+      pause1To: "",
+      pause2From: "",
+      pause2To: "",
+      hours: index === 0 ? "08:00" : "00:00",
+      decimal: index === 0 ? "8.0" : "0.0",
+    })),
+    ...overrides,
+  };
+};
+
 // ===== TESTS =====
 
 describe("TimesheetHybrid Component Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
@@ -867,6 +896,28 @@ describe("TimesheetHybrid Component Tests", () => {
         },
         { timeout: 3000 }
       );
+    });
+  });
+
+  describe("12b. Monatsende-Reminder", () => {
+    it("sollte den Reminder-Dialog mit offenen Wochen rendern, ohne dass Actions verloren gehen", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-31T10:00:00.000Z"));
+
+      const week = weekUtils.getWeekNumber(new Date("2026-03-31T10:00:00.000Z"));
+      const weekData = createFilledWeekData(2026, week);
+      storage.setWeekData(2026, week, weekData, 1);
+
+      renderWithProviders(<TimesheetHybrid {...defaultProps} />);
+
+      const dialogTitle = await screen.findByText(/monatsende-erinnerung/i);
+      const dialog = dialogTitle.closest('[role="dialog"]');
+
+      expect(dialog).toBeInTheDocument();
+      expect(within(dialog as HTMLElement).getByText(/unsignierte wochen/i)).toBeInTheDocument();
+      expect(within(dialog as HTMLElement).getByRole("button", { name: /später erinnern/i })).toBeInTheDocument();
+      expect(within(dialog as HTMLElement).getByRole("button", { name: /jetzt unterschreiben/i })).toBeInTheDocument();
+      expect(within(dialog as HTMLElement).getByRole("button", { name: /öffnen|oeffnen/i })).toBeInTheDocument();
     });
   });
 
