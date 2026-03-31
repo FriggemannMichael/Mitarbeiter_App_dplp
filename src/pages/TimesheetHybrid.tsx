@@ -262,6 +262,8 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
         week_year: exportWeekData.year.toString(),
         date_range: dateRange,
         total_hours: weekStats.totalHours,
+        has_supervisor_signature: Boolean(exportWeekData.supervisorSignature),
+        is_customer_recipient: true,
       };
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };

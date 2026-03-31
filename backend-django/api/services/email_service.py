@@ -106,6 +106,16 @@ def _send_pdf_via_smtp(
         server.quit()
 
 
+def _to_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return False
+
+
 def _should_simulate_email_send() -> bool:
     """
     Dev-Fallback: Simuliere Versand wenn explizit aktiviert oder
@@ -179,6 +189,8 @@ def send_pdf(params: dict) -> dict:
         date_range = params.get('date_range', '')
         total_hours = params.get('total_hours', '')
         amount = params.get('amount', '')
+        has_supervisor_signature = _to_bool(params.get('has_supervisor_signature', False))
+        is_customer_recipient = _to_bool(params.get('is_customer_recipient', False))
 
         pdf_data = base64.b64decode(pdf_base64)
 
@@ -191,10 +203,22 @@ def send_pdf(params: dict) -> dict:
             or db_config.get('company', {}).get('default_email', '').strip()
         )
 
-        subject, body = _generate_email_content(
-            document_type, employee_name, week_number, week_year,
-            date_range, total_hours, amount, admin_email=cc_email
-        )
+        admin_contact_email = cc_email or 'adminstration@dplp.de'
+
+        if document_type == 'timesheet' and is_customer_recipient:
+            subject, body = _generate_customer_timesheet_email(
+                employee_name=employee_name,
+                week_number=week_number,
+                week_year=week_year,
+                date_range=date_range,
+                admin_email=admin_contact_email,
+                has_supervisor_signature=has_supervisor_signature,
+            )
+        else:
+            subject, body = _generate_email_content(
+                document_type, employee_name, week_number, week_year,
+                date_range, total_hours, amount, admin_email=admin_contact_email
+            )
 
         cc_recipients = []
         if document_type == 'timesheet' and cc_email and _EMAIL_RE.match(cc_email):
@@ -243,10 +267,13 @@ def send_pdf(params: dict) -> dict:
         )
 
         if should_send_customer_copy:
-            customer_subject = f'Kopie: {subject}'
-            customer_body = (
-                f'Sie erhalten eine Kopie des Dokuments von {employee_name}.\n\n'
-                f'{body}'
+            customer_subject, customer_body = _generate_customer_timesheet_email(
+                employee_name=employee_name,
+                week_number=week_number,
+                week_year=week_year,
+                date_range=date_range,
+                admin_email=admin_contact_email,
+                has_supervisor_signature=has_supervisor_signature,
             )
             try:
                 _send_pdf_via_smtp(
@@ -322,6 +349,46 @@ def _generate_email_content(doc_type, employee_name, week_number, week_year,
         body = f'Anbei ein Dokument von {employee_name}'
 
     body += '\n\nMit freundlichen Grüßen\nIhr Mitarbeiter Pro System'
+    return subject, body
+
+
+def _generate_customer_timesheet_email(
+    employee_name,
+    week_number,
+    week_year,
+    date_range,
+    admin_email='adminstration@dplp.de',
+    has_supervisor_signature=False,
+) -> tuple:
+    subject = (
+        f'Stundennachweis KW {week_number}/{week_year} - {employee_name}'
+        if week_number and week_year
+        else f'Stundennachweis - {employee_name}'
+    )
+
+    body = 'Sehr geehrte Damen und Herren,\n\n'
+    if has_supervisor_signature:
+        body += f'anbei erhalten Sie eine Kopie des Stundennachweises von {employee_name}'
+    else:
+        body += f'anbei erhalten Sie den Stundennachweis von {employee_name}'
+
+    if week_number and week_year:
+        body += f' fuer die KW {week_number}/{week_year}'
+    if date_range:
+        body += f' ({date_range})'
+
+    body += ' per automatischem Versand aus dem Mitarbeiter Pro System.'
+
+    if not has_supervisor_signature:
+        body += (
+            f'\n\nBitte bestaetigen Sie die geleisteten Stunden, indem Sie den '
+            f'Stundennachweis unterzeichnen und per Email an {admin_email} weiterleiten.'
+        )
+
+    body += (
+        '\n\nFuer Rueckfragen stehen wir Ihnen gerne unter der 02041 77987-0 zur Verfuegung.'
+        '\n\nFreundliche Gruesse\n\nDPL Professionals GmbH'
+    )
     return subject, body
 
 

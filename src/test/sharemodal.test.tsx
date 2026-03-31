@@ -152,6 +152,18 @@ describe("ShareModal", () => {
     weekNumber: 44,
     customerEmail: "kunde@example.com",
     pdfBlob: new Blob(["test-pdf"], { type: "application/pdf" }),
+    weekData: {
+      supervisorSignature: "data:image/png;base64,supervisor",
+      days: [
+        { date: "2025-10-27" },
+        { date: "2025-10-28" },
+        { date: "2025-10-29" },
+        { date: "2025-10-30" },
+        { date: "2025-10-31" },
+        { date: "2025-11-01" },
+        { date: "2025-11-02" },
+      ],
+    } as any,
   };
 
   beforeEach(() => {
@@ -276,6 +288,9 @@ describe("ShareModal", () => {
 
     expect(parsedBody.customer_email).toBe("kunde@example.com");
     expect(parsedBody.recipient_email).toBe("test@firma.de");
+    expect(parsedBody.has_supervisor_signature).toBe(true);
+    expect(parsedBody.is_customer_recipient).toBe(false);
+    expect(parsedBody.date_range).toBe("27.10.2025 - 02.11.2025");
   });
 
   it("schließt das Modal über den Abbrechen-Button", async () => {
