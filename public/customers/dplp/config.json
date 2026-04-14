@@ -44,7 +44,13 @@
     "whatsapp_base_url": "https://wa.me/",
     "cors_allowed_origins": [
       "https://www.ze.dplp.de"
-    ]
+    ],
+    "feature_flags": {
+      "vacation_enabled": false,
+      "advance_payment_enabled": false,
+      "dashboard_show_sick": false,
+      "dashboard_show_vacation": false
+    }
   },
   "work": {
     "max_work_hours_per_day": 12,

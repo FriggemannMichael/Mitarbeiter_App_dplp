@@ -57,6 +57,7 @@ src/test/nul
 
 # Local backups created by tooling/agents
 backup/
+.tmp/
 
 # SSH Keys
 y
@@ -67,3 +68,11 @@ id_rsa.pub
 
 #ai
 .claude
+.github/copilot-instructions.md
+scripts/install-backend-manual.sh
+
+# Local docs/notes
+CLAUDE.md
+docs/guides/KURZANLEITUNG_APP_NUTZUNG.md
+docs/guides/MANUAL_DJANGO_DEPLOY.md
+docs/guides/SERVER1_BACKEND_ZE_DPLP.md

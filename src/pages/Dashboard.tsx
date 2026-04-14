@@ -25,6 +25,7 @@ import { storage, weekUtils } from "../utils/storage";
 import { useConfig } from "../contexts/ConfigContext";
 import { PageHeader } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { isFeatureEnabled } from "../utils/featureFlags";
 
 interface DashboardProps {
   employeeName: string;
@@ -42,6 +43,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const { config } = useConfig();
+  const showSickDashboardCard = isFeatureEnabled(
+    config?.technical,
+    "dashboard_show_sick",
+    true
+  );
+  const showVacationDashboardCard = isFeatureEnabled(
+    config?.technical,
+    "dashboard_show_vacation",
+    true
+  );
   const [showMenu, setShowMenu] = useState(false);
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     storage.getTheme()
@@ -404,47 +415,49 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </motion.div>
 
-          {/* Kranktage */}
-          <motion.div
-            variants={item}
-            className={metricCardBase}
-          >
-            <div className="mb-4 flex justify-center">
-              <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
-                <AlertCircle className="w-5 h-5 text-primary-600" />
+          {showSickDashboardCard && (
+            <motion.div
+              variants={item}
+              className={metricCardBase}
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-primary-600" />
+                </div>
               </div>
-            </div>
-            <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
-              {stats.sickDays}
-              <span className="text-sm font-medium text-slate-500 ml-1">
-                {stats.sickDays === 1 ? "Tag" : "Tage"}
-              </span>
-            </p>
-            <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
-              {t("absence.sick") || "Krank"}
-            </p>
-          </motion.div>
+              <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
+                {stats.sickDays}
+                <span className="text-sm font-medium text-slate-500 ml-1">
+                  {stats.sickDays === 1 ? "Tag" : "Tage"}
+                </span>
+              </p>
+              <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
+                {t("absence.sick") || "Krank"}
+              </p>
+            </motion.div>
+          )}
 
-          {/* Urlaubstage */}
-          <motion.div
-            variants={item}
-            className={metricCardBase}
-          >
-            <div className="mb-4 flex justify-center">
-              <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
-                <CheckCircle2 className="w-5 h-5 text-primary-600" />
+          {showVacationDashboardCard && (
+            <motion.div
+              variants={item}
+              className={metricCardBase}
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="w-5 h-5 text-primary-600" />
+                </div>
               </div>
-            </div>
-            <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
-              {stats.vacationDays}
-              <span className="text-sm font-medium text-slate-500 ml-1">
-                {stats.vacationDays === 1 ? "Tag" : "Tage"}
-              </span>
-            </p>
-            <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
-              {t("absence.vacation") || "Urlaub"}
-            </p>
-          </motion.div>
+              <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
+                {stats.vacationDays}
+                <span className="text-sm font-medium text-slate-500 ml-1">
+                  {stats.vacationDays === 1 ? "Tag" : "Tage"}
+                </span>
+              </p>
+              <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
+                {t("absence.vacation") || "Urlaub"}
+              </p>
+            </motion.div>
+          )}
 
           {/* Offene Wochen – Handlungsaufforderung */}
           {(() => {
