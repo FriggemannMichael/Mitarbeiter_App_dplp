@@ -38,6 +38,33 @@ function Require-Keys {
   }
 }
 
+function Find-LegacyDeploymentConflicts {
+  param(
+    [string]$BackendPath,
+    [string]$ComposePath,
+    [string]$EnvAppPath
+  )
+
+  $parentPath = Split-Path $BackendPath -Parent
+  if (-not $parentPath -or $parentPath -eq $BackendPath) {
+    return @()
+  }
+
+  $conflicts = @()
+  $legacyCompose = Join-Path $parentPath "docker-compose.yml"
+  $legacyEnvApp = Join-Path $parentPath ".env.app"
+
+  if ((Test-Path $legacyCompose) -and ($legacyCompose -ne $ComposePath)) {
+    $conflicts += $legacyCompose
+  }
+
+  if ((Test-Path $legacyEnvApp) -and ($legacyEnvApp -ne $EnvAppPath)) {
+    $conflicts += $legacyEnvApp
+  }
+
+  return $conflicts
+}
+
 Write-Host "== Preflight ==" -ForegroundColor Cyan
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -54,6 +81,11 @@ if (-not (Test-Path $composePath)) { throw "Compose-Datei fehlt: $composePath" }
 if (-not (Test-Path $envAppPath)) { throw ".env.app fehlt: $envAppPath" }
 if (-not (Test-Path $envDockerPath)) { throw ".env fehlt: $envDockerPath" }
 if (-not (Test-Path $configPath)) { throw "public/config.json fehlt: $configPath" }
+
+$legacyConflicts = Find-LegacyDeploymentConflicts -BackendPath $backendPath -ComposePath $composePath -EnvAppPath $envAppPath
+if ($legacyConflicts.Count -gt 0) {
+  throw "Legacy-Deployment-Dateien neben dem Backend gefunden: $($legacyConflicts -join ', '). Produktion darf nur einen Compose/.env.app-Pfad verwenden."
+}
 
 $envApp = Read-EnvFile -Path $envAppPath
 $required = @(

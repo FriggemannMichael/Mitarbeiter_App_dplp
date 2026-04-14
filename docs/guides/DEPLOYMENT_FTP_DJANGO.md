@@ -32,6 +32,26 @@ Vorbereitete Deploy-Artefakte in diesem Repo:
 - `backend-django/.env.docker.example`
 - `scripts/deploy-prod.ps1`
 
+## 2.1 Single Source of Truth fuer Produktion
+
+Produktiv darf es genau einen aktiven Backend-Pfad geben:
+
+- `backend-django/docker-compose.prod.yml`
+- `backend-django/.env.app`
+- `backend-django/.env`
+
+Nicht parallel betreiben:
+
+- zusaetzliche `docker-compose.yml` Dateien eine Ebene hoeher
+- zweite produktive `.env.app` ausserhalb von `backend-django/`
+- manuell gestartete Container mit abweichenden Env-Werten
+
+Warum das wichtig ist:
+
+- SMTP-, JWT- und Datenbankwerte muessen aus genau einer Datei kommen
+- sonst sieht man im UI einen Wert, waehrend der laufende Container einen anderen nutzt
+- Fehleranalyse wird sonst unnoetig schwer
+
 ## 3. Release lokal vorbereiten
 
 Im Projektroot:
@@ -81,6 +101,14 @@ npm run build
 
 Ordner `backend-django/` auf den Server kopieren (FTP oder Git-Deploy).  
 Der Start erfolgt danach ausschliesslich per `docker compose`.
+
+Server-Zielbild:
+
+- `<deploy-root>/backend-django/docker-compose.prod.yml`
+- `<deploy-root>/backend-django/.env.app`
+- `<deploy-root>/backend-django/.env`
+
+Im `<deploy-root>` selbst sollen keine zweite `docker-compose.yml` und keine zweite `.env.app` fuer dasselbe Backend liegen.
 
 ### 6.2 Environment anlegen
 
@@ -162,6 +190,12 @@ Optional (abweichende Pfade/Dateinamen):
 ```powershell
 .\scripts\deploy-prod.ps1 -BackendDir "C:\apps\mitarbeiter\backend-django" -ComposeFile "docker-compose.prod.yml"
 ```
+
+Wichtig:
+
+- `docker-compose.yml` in `backend-django/` ist nur fuer lokale Entwicklung gedacht.
+- Produktion nutzt ausschliesslich `docker-compose.prod.yml`.
+- Wenn auf dem Server bereits ein zweiter Compose-Entry-Point oder eine zweite `.env.app` existiert, muss dieser Altpfad vor dem Go-Live entfernt oder stillgelegt werden.
 
 Hinweis: Initiale Migrationen sind vorhanden.  
 Bei Model-Aenderungen immer neue Migrationen erzeugen und mitdeployen:

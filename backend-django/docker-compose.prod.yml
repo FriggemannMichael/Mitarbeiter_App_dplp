@@ -1,6 +1,6 @@
 services:
   web:
-    image: ${DOCKER_IMAGE:-ghcr.io/OWNER/REPO:latest}
+    image: ghcr.io/friggemannmichael/mitarbeiterapp:latest
     env_file:
       - .env.app
     depends_on:
