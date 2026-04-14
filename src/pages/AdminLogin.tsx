@@ -15,7 +15,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   const companyConfig = useCompanyConfig();
-  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.png`;
+  const defaultLogoSrc = `${import.meta.env.BASE_URL}customers/DPL%20Logo.svg`;
   const logoSrc = companyConfig.company_logo || defaultLogoSrc;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

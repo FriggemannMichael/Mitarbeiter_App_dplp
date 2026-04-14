@@ -526,7 +526,7 @@ export class ConfigManager {
         default_email: defaultCompanyEmail,
         default_whatsapp:
           import.meta.env.VITE_DEFAULT_WHATSAPP || "+49 123 4567890",
-        company_logo: "", // â† NEU
+        company_logo: "/customers/DPL%20Logo.svg",
       },
       pdf: {
         app_name: "Stundennachweis Pro",
