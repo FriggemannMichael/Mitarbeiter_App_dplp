@@ -51,6 +51,61 @@ const devLog = (...args: unknown[]) => {
   }
 };
 
+const getMonthKey = (date: string): string => {
+  const [year, month] = date.split("-").map(Number);
+  return `${year}-${month - 1}`;
+};
+
+const hasDayEntry = (day: DayData): boolean => {
+  const hasWorkTime = Boolean(day.from && day.to && day.decimal !== "0.00");
+  const hasAbsence = Boolean(day.absence);
+  return hasWorkTime || hasAbsence;
+};
+
+const getActiveMonthKeyForSheet = (
+  week: WeekData,
+  otherSheets: WeekData[],
+): string => {
+  const fallbackMonthKey = week.days[0] ? getMonthKey(week.days[0].date) : "";
+  const firstUsedDay = week.days.find(hasDayEntry);
+
+  if (firstUsedDay) {
+    return getMonthKey(firstUsedDay.date);
+  }
+
+  const usedDatesInOtherSheets = new Set<string>();
+  otherSheets.forEach((sheet) => {
+    sheet.days.forEach((day) => {
+      if (hasDayEntry(day)) {
+        usedDatesInOtherSheets.add(day.date);
+      }
+    });
+  });
+
+  if (usedDatesInOtherSheets.size === 0) {
+    return fallbackMonthKey;
+  }
+
+  const freeDaysByMonth = new Map<string, number>();
+  week.days.forEach((day) => {
+    if (!usedDatesInOtherSheets.has(day.date)) {
+      const monthKey = getMonthKey(day.date);
+      freeDaysByMonth.set(monthKey, (freeDaysByMonth.get(monthKey) || 0) + 1);
+    }
+  });
+
+  let activeMonthKey = fallbackMonthKey;
+  let highestFreeDayCount = -1;
+  freeDaysByMonth.forEach((freeDayCount, monthKey) => {
+    if (freeDayCount > highestFreeDayCount) {
+      activeMonthKey = monthKey;
+      highestFreeDayCount = freeDayCount;
+    }
+  });
+
+  return activeMonthKey;
+};
+
 interface WeekDataContextType {
   // State
   currentWeek: WeekData | null;
@@ -810,13 +865,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       if (sheet.sheetId === currentSheetId) return;
 
       sheet.days.forEach((day) => {
-        // Tag ist "verwendet" wenn:
-        // 1. Arbeitszeit eingetragen ist (from, to, decimal > 0)
-        // 2. ODER Abwesenheit markiert ist (Krank, Urlaub, Feiertag, etc.)
-        const hasWorkTime = day.from && day.to && day.decimal !== "0.00";
-        const hasAbsence = day.absence && day.absence !== null;
-
-        if (hasWorkTime || hasAbsence) {
+        if (hasDayEntry(day)) {
           usedDates.add(day.date);
         }
       });
@@ -839,6 +888,13 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         // Hole gesperrte Tage aus anderen Sheets
         const lockedDates = getUsedDaysInOtherSheets();
+        const otherSheets = allSheets.filter(
+          (sheet) => sheet.sheetId !== currentSheetId,
+        );
+        const activeMonthKey = getActiveMonthKeyForSheet(
+          currentWeek,
+          otherSheets,
+        );
 
         // Delegiere an ShiftConfigContext mit gesperrten Tagen
         const updatedWeek = shiftConfig.applyShiftConfig(
@@ -847,6 +903,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           config,
           selectedDays,
           lockedDates,
+          activeMonthKey,
         );
 
         setCurrentWeek(updatedWeek);
@@ -855,7 +912,13 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
       }
     },
-    [currentWeek, shiftConfig, getUsedDaysInOtherSheets],
+    [
+      currentWeek,
+      shiftConfig,
+      getUsedDaysInOtherSheets,
+      allSheets,
+      currentSheetId,
+    ],
   );
 
   const isDayEditable = useCallback(
@@ -875,22 +938,19 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       // Der Haupt-Monat ist der Monat des ersten Wochentags (Montag),
       // nicht der Monat mit den meisten Tagen – sonst werden die letzten
       // Märztage in der KW gesperrt, die mit 30./31.03 beginnt.
-      const dayDate = new Date(day.date);
-      const dayMonth = dayDate.getMonth();
-      const dayYear = dayDate.getFullYear();
-
-      const firstDayDate = new Date(currentWeek.days[0].date);
-      const primaryMonth = `${firstDayDate.getFullYear()}-${firstDayDate.getMonth()}`;
-      const currentDayKey = `${dayYear}-${dayMonth}`;
+      const otherSheets = allSheets.filter(
+        (sheet) => sheet.sheetId !== currentSheetId,
+      );
+      const activeMonthKey = getActiveMonthKeyForSheet(currentWeek, otherSheets);
 
       // Tag ist nur bearbeitbar, wenn er zum Haupt-Monat gehört
-      if (currentDayKey !== primaryMonth) {
+      if (getMonthKey(day.date) !== activeMonthKey) {
         return false;
       }
 
       return checkDayEditable(day, currentWeek.status);
     },
-    [currentWeek, getUsedDaysInOtherSheets],
+    [currentWeek, getUsedDaysInOtherSheets, allSheets, currentSheetId],
   );
 
   const isEditable = currentWeek ? checkWeekEditable(currentWeek) : false;
@@ -911,20 +971,14 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       const day = currentWeek.days[dayIndex];
       if (!day) return false;
 
-      // Hole Monat und Jahr des Tages
-      const dayDate = new Date(day.date);
-      const dayMonth = dayDate.getMonth();
-      const dayYear = dayDate.getFullYear();
+      const otherSheets = allSheets.filter(
+        (sheet) => sheet.sheetId !== currentSheetId,
+      );
+      const activeMonthKey = getActiveMonthKeyForSheet(currentWeek, otherSheets);
 
-      // Hole Monat und Jahr des ersten Tages der Woche
-      const firstDayDate = new Date(currentWeek.days[0].date);
-      const firstDayMonth = firstDayDate.getMonth();
-      const firstDayYear = firstDayDate.getFullYear();
-
-      // Tag liegt in anderem Monat wenn Jahr oder Monat unterschiedlich sind
-      return dayYear !== firstDayYear || dayMonth !== firstDayMonth;
+      return getMonthKey(day.date) !== activeMonthKey;
     },
-    [currentWeek],
+    [currentWeek, allSheets, currentSheetId],
   );
 
   /**
