@@ -71,7 +71,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     const dateRangeText = dateRange ? ` (${dateRange})` : "";
     const signatureRequest = hasSupervisorSignature
       ? ""
-      : "\n\nBitte bestätigen Sie die geleisteten Stunden, indem Sie den Stundennachweis unterzeichnen und per Email an adminstration@dplp.de weiterleiten.";
+      : `\n\nBitte bestätigen Sie die geleisteten Stunden, indem Sie den Stundennachweis unterzeichnen und per Email an ${adminContactEmail} weiterleiten.`;
 
     return `Sehr geehrte Damen und Herren,
 
