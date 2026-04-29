@@ -417,5 +417,8 @@
   "status.sending": "Wysyłanie...",
   "common.menu": "Menu",
   "theme.darkMode": "Tryb ciemny",
-  "theme.lightMode": "Tryb jasny"
+  "theme.lightMode": "Tryb jasny",
+  "absence.absent": "Nieobecny",
+  "day.orderNumberOptional": "Numer zlecenia (opcjonalnie)",
+  "day.commissionOptional": "Prowizja (opcjonalnie)"
 }

@@ -417,5 +417,8 @@
   "status.sending": "Envoi en cours...",
   "common.menu": "Menu",
   "theme.darkMode": "Mode sombre",
-  "theme.lightMode": "Mode clair"
+  "theme.lightMode": "Mode clair",
+  "absence.absent": "Absent",
+  "day.orderNumberOptional": "Num?ro de commande (optionnel)",
+  "day.commissionOptional": "Commission (optionnel)"
 }

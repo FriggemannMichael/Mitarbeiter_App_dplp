@@ -417,5 +417,8 @@
   "status.sending": "Se trimite...",
   "common.menu": "Meniu",
   "theme.darkMode": "Mod ?ntunecat",
-  "theme.lightMode": "Mod luminos"
+  "theme.lightMode": "Mod luminos",
+  "absence.absent": "Absent",
+  "day.orderNumberOptional": "Num?r comand? (op?ional)",
+  "day.commissionOptional": "Comision (op?ional)"
 }

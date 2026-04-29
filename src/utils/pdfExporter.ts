@@ -5,6 +5,7 @@ import type { AppConfiguration } from "../types/config.types";
 import { TimeCalculationService } from "../core/time";
 import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { isFeatureEnabled } from "./featureFlags";
 
 export class PdfExporter {
   private static dataUrlToBytes(dataUrl: string): Uint8Array {
@@ -42,6 +43,7 @@ export class PdfExporter {
       flextime: "Gleitzeit",
       holiday: "Feiertag",
       unpaid: "Unbezahlt",
+      absent: "Abwesend",
     };
 
     if (!absence) {
@@ -49,6 +51,16 @@ export class PdfExporter {
     }
 
     return labels[absence] || absence;
+  }
+
+  private static truncatePdfCell(value?: string, maxLength = 20): string {
+    const normalized = (value || "").trim();
+    if (!normalized) {
+      return "";
+    }
+    return normalized.length > maxLength
+      ? `${normalized.slice(0, maxLength - 1)}…`
+      : normalized;
   }
 
   private static async convertSvgToPngBytes(
@@ -275,16 +287,27 @@ export class PdfExporter {
 
     yPosition -= 40;
     const headerY = yPosition;
-    const rowHeight = 25;
-    const colWidths = [100, 60, 60, 70, 70, 80];
-    const headers = [
-      "Tag/Datum",
-      "Von",
-      "Bis",
-      "Pause 1",
-      "Pause 2",
-      "Stunden",
-    ];
+    const showOrderDetailsColumn =
+      isFeatureEnabled(
+        config.technical,
+        "simple_dayshift_absence_with_job_fields",
+        false,
+      ) && weekData.shiftModel === "day";
+    const rowHeight = showOrderDetailsColumn ? 34 : 25;
+    const colWidths = showOrderDetailsColumn
+      ? [95, 50, 50, 60, 60, 70, 105]
+      : [100, 60, 60, 70, 70, 80];
+    const headers = showOrderDetailsColumn
+      ? [
+          "Tag/Datum",
+          "Von",
+          "Bis",
+          "Pause 1",
+          "Pause 2",
+          "Stunden",
+          "Auftrag / Kommission",
+        ]
+      : ["Tag/Datum", "Von", "Bis", "Pause 1", "Pause 2", "Stunden"];
 
     page.drawRectangle({
       x: leftMargin,
@@ -389,6 +412,15 @@ export class PdfExporter {
         pause2,
         hours,
       ];
+      if (showOrderDetailsColumn) {
+        const orderDetails = [
+          this.truncatePdfCell(d.orderNumber),
+          this.truncatePdfCell(d.commission),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        row.push(orderDetails || "-");
+      }
 
       cx = leftMargin + 5;
       row.forEach((c, ci) => {
@@ -403,6 +435,22 @@ export class PdfExporter {
           page.drawText(dateF, {
             x: cx,
             y: yPosition - 2,
+            size: 8,
+            font: helvetica,
+            color: darkGray,
+          });
+        } else if (ci === row.length - 1 && c.includes("\n")) {
+          const [line1, line2] = c.split("\n");
+          page.drawText(line1, {
+            x: cx,
+            y: yPosition + 8,
+            size: 8,
+            font: helvetica,
+            color: black,
+          });
+          page.drawText(line2, {
+            x: cx,
+            y: yPosition - 1,
             size: 8,
             font: helvetica,
             color: darkGray,

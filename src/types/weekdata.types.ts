@@ -11,6 +11,7 @@ export type AbsenceType =
   | "flextime"
   | "holiday"
   | "unpaid"
+  | "absent"
   | null;
 
 // Mitarbeiter-Daten
@@ -42,6 +43,8 @@ export interface DayData {
   // Optional: Spezielle Einträge
   absence?: AbsenceType;
   absenceNote?: string; // Optional: Notiz zur Abwesenheit (z.B. Attest-Nummer)
+  orderNumber?: string;
+  commission?: string;
   isNightShift?: boolean;
   nightShiftEndDate?: string; // ISO-8601 für Nachtschicht-Ende
   note?: string;

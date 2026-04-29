@@ -566,6 +566,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         decimal: "0.00",
         absence: null,
         absenceNote: "",
+        orderNumber: "",
+        commission: "",
         isNightShift: false,
         nightShiftEndDate: "",
         note: "",
@@ -603,6 +605,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
               hours: "00:00",
               decimal: "0.00",
               absence: null,
+              orderNumber: "",
+              commission: "",
               isNightShift: false,
               note: undefined,
             }

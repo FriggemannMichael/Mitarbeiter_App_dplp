@@ -59,6 +59,15 @@ export function createMockConfig(
       time_format: "HH:mm",
     },
     admin: { password: "test" },
+    email: {
+      smtp_host: "localhost",
+      smtp_port: 25,
+      smtp_encryption: "none",
+      smtp_username: "",
+      smtp_password: "",
+      from_email: "test@example.com",
+      from_name: "Test",
+    },
     isLoaded: true,
   };
 
@@ -70,6 +79,7 @@ export function createMockConfig(
     technical: { ...baseConfig.technical, ...(overrides.technical || {}) },
     work: { ...baseConfig.work, ...(overrides.work || {}) },
     admin: { ...baseConfig.admin, ...(overrides.admin || {}) },
+    email: { ...baseConfig.email, ...(overrides.email || {}) },
   };
 }
 

@@ -596,6 +596,7 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                 isEditable={isEditable}
                 isDayLocked={!isDayEditable(index)}
                 isDayInDifferentMonth={isDayInDifferentMonth(index)}
+                weekShiftModel={weekData.shiftModel}
                 onTimeChange={updateDayTime}
                 onResetDay={resetDay}
               />

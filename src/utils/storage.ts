@@ -7,6 +7,7 @@ export type AbsenceType =
   | "flextime"
   | "holiday"
   | "unpaid"
+  | "absent"
   | null;
 
 // Erweiterte Tagesstruktur für einfache Schichtmodelle
@@ -26,6 +27,8 @@ export interface DayData {
   // Abwesenheit: Wenn gesetzt, werden Arbeitszeiten ignoriert
   absence?: AbsenceType;
   absenceNote?: string; // Optional: Notiz zur Abwesenheit (z.B. Attest-Nummer)
+  orderNumber?: string;
+  commission?: string;
 
   // Neue Felder gemäß TIMESHEET-LOGIC-SPEC.json
   customer?: string; // Kunde für diesen spezifischen Tag (überschreibt WeekData.customer)
