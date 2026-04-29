@@ -1,6 +1,7 @@
 {
   "common.edit": "Edit",
   "common.delete": "Delete",
+  "common.open": "Open",
   "welcome.title": "Timesheet",
   "welcome.subtitle": "Mobile time tracking for employees",
   "welcome.instructions.title": "How it works",
