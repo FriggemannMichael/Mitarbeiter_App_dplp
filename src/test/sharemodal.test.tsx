@@ -293,6 +293,34 @@ describe("ShareModal", () => {
     expect(parsedBody.date_range).toBe("27.10.2025 - 02.11.2025");
   });
 
+  it("sendet den PDF-API-Key mit, wenn er konfiguriert ist", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <ShareModal {...defaultProps} />,
+      createMockConfig({
+        technical: {
+          api_endpoint: "/backend",
+          pdf_api_key: "secret-key",
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Senden" }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/backend/api/send-pdf",
+        expect.objectContaining({
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": "secret-key",
+          },
+        }),
+      );
+    });
+  });
+
   it("schließt das Modal über den Abbrechen-Button", async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();

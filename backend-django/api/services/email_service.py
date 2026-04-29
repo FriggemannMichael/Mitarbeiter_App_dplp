@@ -205,7 +205,9 @@ def send_pdf(params: dict) -> dict:
 
         admin_contact_email = cc_email or 'adminstration@dplp.de'
 
-        if document_type == 'timesheet' and is_customer_recipient:
+        if document_type == 'timesheet' and (
+            is_customer_recipient or not has_supervisor_signature
+        ):
             subject, body = _generate_customer_timesheet_email(
                 employee_name=employee_name,
                 week_number=week_number,

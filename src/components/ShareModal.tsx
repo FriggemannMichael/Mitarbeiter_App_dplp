@@ -46,6 +46,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [success, setSuccess] = useState(false);
   const hasSupervisorSignature = Boolean(weekData?.supervisorSignature);
+  const adminContactEmail =
+    config.technical.pdf_review_cc_email?.trim() ||
+    config.company.default_email?.trim() ||
+    "adminstration@dplp.de";
 
   const dateRange = useMemo(() => {
     const dates = (weekData?.days || [])
@@ -139,13 +143,18 @@ DPL Professionals GmbH`;
           is_customer_recipient: false,
         };
 
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (config.technical.pdf_api_key) {
+          headers["X-Api-Key"] = config.technical.pdf_api_key;
+        }
+
         const response = await fetch(
           `${config.technical.api_endpoint}/api/send-pdf`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify(payload),
           },
         );
