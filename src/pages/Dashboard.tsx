@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Clock,
@@ -26,6 +26,8 @@ import { useConfig } from "../contexts/ConfigContext";
 import { PageHeader } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { isFeatureEnabled } from "../utils/featureFlags";
+import { apiService } from "../services/apiService";
+import type { WeekData } from "../types/weekdata.types";
 
 interface DashboardProps {
   employeeName: string;
@@ -54,6 +56,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     true
   );
   const [showMenu, setShowMenu] = useState(false);
+  const [backendWeeks, setBackendWeeks] = useState<WeekData[] | null>(null);
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     storage.getTheme()
   );
@@ -111,8 +114,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const currentWeek = currentWeekData.week;
   const currentYear = currentWeekData.year;
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadDashboardWeeks = async () => {
+      try {
+        const response = await apiService.listTimesheets<WeekData>({
+          limit: 64,
+        });
+        if (!response.success || !Array.isArray(response.data)) {
+          return;
+        }
+
+        const weeks = response.data
+          .map((item) => item.weekData)
+          .filter((weekData): weekData is WeekData => Boolean(weekData));
+
+        weeks.forEach((weekData) => {
+          storage.setWeekData(
+            weekData.year,
+            weekData.week,
+            weekData as import("../utils/storage").WeekData,
+            weekData.sheetId ?? 1,
+          );
+        });
+
+        if (!isCancelled) {
+          setBackendWeeks(weeks);
+        }
+      } catch {
+        // localStorage fallback remains active
+      }
+    };
+
+    void loadDashboardWeeks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
   // Wochendaten laden (mit allen Zetteln pro Woche)
   const weekData = useMemo(() => {
+    void backendWeeks;
+
     const weeks: Array<{
       week: number;
       year: number;

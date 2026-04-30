@@ -3,8 +3,9 @@ from api.views.health import health
 from api.views.auth import login, logout, me
 from api.views.config import app_config, admin_config, save_admin_config, change_password
 from api.views.accounts import list_accounts, create_account, update_account
+from api.views.employee_device import init_employee_device
 from api.views.users import save_user, get_user
-from api.views.timesheets import save_timesheet, get_timesheet
+from api.views.timesheets import save_timesheet, get_timesheet, list_timesheets
 from api.views.email import test_email, send_pdf_view
 
 urlpatterns = [
@@ -27,6 +28,7 @@ urlpatterns = [
     path('api/accounts', list_accounts),
     path('api/accounts/create', create_account),
     path('api/accounts/<int:account_id>', update_account),
+    path('api/employee-device/init', init_employee_device),
 
     # User
     path('api/save-user', save_user),
@@ -35,6 +37,7 @@ urlpatterns = [
     # Timesheet
     path('api/save-timesheet', save_timesheet),
     path('api/get-timesheet', get_timesheet),
+    path('api/list-timesheets', list_timesheets),
 
     # Email + PDF – ACHTUNG: send-pdf hat KEIN /api/ Prefix (wie PHP)
     path('api/test-email', test_email),

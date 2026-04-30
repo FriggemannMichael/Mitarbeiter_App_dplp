@@ -43,3 +43,17 @@ def get_request_customer_key(request, body: dict | None = None) -> str:
             return key
 
     return get_default_customer_key()
+
+
+def get_employee_request_customer_key(request) -> str:
+    """
+    Employee-Endpoints duerfen keinen frei gelieferten customer_key aus
+    Header/Query/Body vertrauen. Fuer den anonymen Mitarbeiter-Flow wird der
+    Tenant deshalb serverseitig festgelegt.
+    """
+    admin_user = getattr(request, 'admin_user', None) or {}
+    key = _normalize_customer_key(admin_user.get('customer_key'))
+    if key:
+        return key
+
+    return get_default_customer_key()

@@ -33,6 +33,7 @@ import React, {
 } from "react";
 import type { WeekData, DayData, WeekStats } from "../types/weekdata.types";
 import { storage, weekUtils } from "../utils/storage";
+import { apiService } from "../services/apiService";
 import {
   migrateWeekDataComplete,
   needsMigration,
@@ -252,6 +253,20 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     currentWeekRef.current = currentWeek;
   }, [currentWeek]);
 
+  const syncWeekToBackend = useCallback(async (weekData: WeekData) => {
+    try {
+      await apiService.saveTimesheet({
+        weekData,
+        year: weekData.year,
+        week: weekData.week,
+        sheetId: weekData.sheetId ?? 1,
+        displayName: weekData.employeeName,
+      });
+    } catch (error) {
+      devLog("[WeekDataContext] Backend sync skipped/failed", error);
+    }
+  }, []);
+
   /**
    * Helper: Erstelle leere Woche
    */
@@ -346,9 +361,11 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         data: weekToSave,
       });
 
+      void syncWeekToBackend(weekToSave);
+
       return weekToSave;
     },
-    [timeCalc],
+    [syncWeekToBackend, timeCalc],
   );
 
   /**
@@ -385,7 +402,47 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const sheets = storage.getAllSheetsForWeek(year, week);
         setAllSheets(sheets as WeekData[]);
 
-        let data = storage.getWeekData(year, week, sheetId) as WeekData | null;
+        let data: WeekData | null = null;
+        let backendSheets: WeekData[] = [];
+
+        try {
+          const listResponse = await apiService.listTimesheets<WeekData>({
+            year,
+            week,
+          });
+          if (listResponse.success && Array.isArray(listResponse.data)) {
+            backendSheets = listResponse.data
+              .map((item) => item.weekData)
+              .filter((weekData): weekData is WeekData => Boolean(weekData));
+
+            backendSheets.forEach((sheet) => {
+              storage.setWeekData(
+                sheet.year,
+                sheet.week,
+                sheet as import("../utils/storage").WeekData,
+                sheet.sheetId ?? 1,
+              );
+            });
+          }
+
+          const response = await apiService.getTimesheet<WeekData>(year, week, sheetId);
+          const backendWeekData = response.data?.weekData;
+          if (response.success && backendWeekData) {
+            data = backendWeekData;
+            storage.setWeekData(
+              year,
+              week,
+              data as import("../utils/storage").WeekData,
+              sheetId,
+            );
+          }
+        } catch (error) {
+          devLog("[WeekDataContext] Backend load failed, fallback to localStorage", error);
+        }
+
+        if (!data) {
+          data = storage.getWeekData(year, week, sheetId) as WeekData | null;
+        }
 
         if (!data) {
           data = createEmptyWeek(year, week, sheetId);
@@ -415,6 +472,11 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
 
+        const refreshedSheets =
+          backendSheets.length > 0
+            ? backendSheets.sort((a, b) => (a.sheetId ?? 1) - (b.sheetId ?? 1))
+            : storage.getAllSheetsForWeek(year, week);
+        setAllSheets(refreshedSheets as WeekData[]);
         setCurrentWeek(data as WeekData);
         setCurrentWeekInfo({ year, week });
         setCurrentSheetId(sheetId);
@@ -468,8 +530,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteWeek = useCallback(
     async (year: number, week: number, sheetId: number = 1) => {
       try {
-        const weekKey = `week_${year}_${week}_${sheetId}`;
-        localStorage.removeItem(weekKey);
+        storage.removeWeekData(year, week, sheetId);
 
         if (
           currentWeek?.year === year &&
