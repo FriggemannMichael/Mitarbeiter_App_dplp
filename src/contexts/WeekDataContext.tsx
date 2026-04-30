@@ -199,6 +199,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   // BroadcastChannel für Tab-Sync
   const channelRef = useRef<BroadcastChannel | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentWeekRef = useRef<WeekData | null>(null);
 
   // BroadcastChannel Setup
   useEffect(() => {
@@ -247,6 +248,10 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+  useEffect(() => {
+    currentWeekRef.current = currentWeek;
+  }, [currentWeek]);
+
   /**
    * Helper: Erstelle leere Woche
    */
@@ -286,6 +291,30 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     [],
   );
+
+  useEffect(() => {
+    return () => {
+      if (!saveTimerRef.current || !currentWeekRef.current) {
+        return;
+      }
+
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+
+      const recalculatedWeek = timeCalc.recalculateWeekData(currentWeekRef.current);
+      const weekToSave = {
+        ...recalculatedWeek,
+        sheetId: recalculatedWeek.sheetId ?? 1,
+      };
+
+      storage.setWeekData(
+        weekToSave.year,
+        weekToSave.week,
+        weekToSave as import("../utils/storage").WeekData,
+        weekToSave.sheetId,
+      );
+    };
+  }, [timeCalc]);
 
   /**
    * Helper: Speichert Wochendaten (DRY - Don't Repeat Yourself)
