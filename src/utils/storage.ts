@@ -267,6 +267,50 @@ export const storage = {
     return keys;
   },
 
+  getRecentDayFieldValues: (
+    field: "orderNumber" | "commission",
+    limit: number = 20,
+  ): string[] => {
+    const valuesWithTimestamp: Array<{ value: string; updatedAt: number }> = [];
+
+    storage.getAllWeekKeys().forEach((key) => {
+      const data = localStorage.getItem(key);
+      if (!data) return;
+
+      try {
+        const weekData: WeekData = JSON.parse(data);
+        const updatedAt = weekData.updatedAt
+          ? new Date(weekData.updatedAt).getTime()
+          : 0;
+
+        weekData.days?.forEach((day) => {
+          const rawValue = day[field];
+          const value =
+            typeof rawValue === "string" ? rawValue.trim() : "";
+
+          if (!value) return;
+
+          valuesWithTimestamp.push({ value, updatedAt });
+        });
+      } catch (error) {
+        console.warn(`Failed to parse week data for key ${key}:`, error);
+      }
+    });
+
+    const latestByValue = new Map<string, number>();
+    valuesWithTimestamp.forEach(({ value, updatedAt }) => {
+      const current = latestByValue.get(value) ?? 0;
+      if (updatedAt >= current) {
+        latestByValue.set(value, updatedAt);
+      }
+    });
+
+    return Array.from(latestByValue.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de"))
+      .slice(0, limit)
+      .map(([value]) => value);
+  },
+
   // Alle App-Daten löschen
   clearAllData: (): void => {
     const keysToRemove: string[] = [];

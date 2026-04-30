@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -28,7 +29,7 @@ import {
   RestartAlt as ResetIcon,
   Check as CheckIcon,
 } from "@mui/icons-material";
-import { DayData } from "../utils/storage";
+import { DayData, storage } from "../utils/storage";
 import { formatDate, formatHours } from "../utils/formatters";
 import { useConfig } from "../contexts/ConfigContext";
 import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
@@ -98,6 +99,14 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
     false,
   );
   const useSimplifiedDayShiftMode = simplifiedDayShiftEnabled;
+  const orderNumberOptions = useMemo(
+    () => storage.getRecentDayFieldValues("orderNumber"),
+    [],
+  );
+  const commissionOptions = useMemo(
+    () => storage.getRecentDayFieldValues("commission"),
+    [],
+  );
 
   const handleTimeChange = (
     field: keyof DayData,
@@ -368,23 +377,59 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
             <>
               <Divider />
               <Stack spacing={2}>
-                <TextField
-                  label={t("day.orderNumberOptional") || "Auftragsnummer (optional)"}
+                <Autocomplete
+                  freeSolo
+                  options={orderNumberOptions}
                   value={day.orderNumber || ""}
-                  onChange={(e) =>
-                    handleTimeChange("orderNumber", e.target.value)
-                  }
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") {
+                      handleTimeChange("orderNumber", value);
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    handleTimeChange("orderNumber", typeof value === "string" ? value : "");
+                  }}
                   disabled={!effectivelyEditable}
                   fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={
+                        t("day.orderNumberOptional") || "Auftragsnummer (optional)"
+                      }
+                      helperText={
+                        orderNumberOptions.length > 0
+                          ? "Bereits verwendete Auftragsnummern können ausgewählt oder überschrieben werden."
+                          : undefined
+                      }
+                    />
+                  )}
                 />
-                <TextField
-                  label={t("day.commissionOptional") || "Kommission (optional)"}
+                <Autocomplete
+                  freeSolo
+                  options={commissionOptions}
                   value={day.commission || ""}
-                  onChange={(e) =>
-                    handleTimeChange("commission", e.target.value)
-                  }
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") {
+                      handleTimeChange("commission", value);
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    handleTimeChange("commission", typeof value === "string" ? value : "");
+                  }}
                   disabled={!effectivelyEditable}
                   fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t("day.commissionOptional") || "Kommission (optional)"}
+                      helperText={
+                        commissionOptions.length > 0
+                          ? "Bereits verwendete Kommissionen können ausgewählt oder überschrieben werden."
+                          : undefined
+                      }
+                    />
+                  )}
                 />
               </Stack>
             </>
