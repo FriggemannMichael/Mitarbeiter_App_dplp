@@ -73,7 +73,6 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
   dayIndex,
   isEditable,
   isDayLocked = false,
-  weekShiftModel,
   onTimeChange,
   onResetDay,
 }) => {
@@ -98,8 +97,7 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
     "simple_dayshift_absence_with_job_fields",
     false,
   );
-  const useSimplifiedDayShiftMode =
-    simplifiedDayShiftEnabled && weekShiftModel === "day";
+  const useSimplifiedDayShiftMode = simplifiedDayShiftEnabled;
 
   const handleTimeChange = (
     field: keyof DayData,

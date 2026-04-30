@@ -292,7 +292,7 @@ export class PdfExporter {
         config.technical,
         "simple_dayshift_absence_with_job_fields",
         false,
-      ) && weekData.shiftModel === "day";
+      );
     const rowHeight = showOrderDetailsColumn ? 34 : 25;
     const colWidths = showOrderDetailsColumn
       ? [95, 50, 50, 60, 60, 70, 105]
@@ -636,4 +636,3 @@ export class PdfExporter {
     this.downloadPDF(bytes, filename);
   }
 }
-
