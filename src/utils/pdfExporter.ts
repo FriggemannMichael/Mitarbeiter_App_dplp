@@ -293,7 +293,7 @@ export class PdfExporter {
         "simple_dayshift_absence_with_job_fields",
         false,
       );
-    const rowHeight = showOrderDetailsColumn ? 34 : 25;
+    const rowHeight = showOrderDetailsColumn ? 42 : 25;
     const colWidths = showOrderDetailsColumn
       ? [95, 50, 50, 60, 60, 70, 105]
       : [100, 60, 60, 70, 70, 80];
@@ -401,9 +401,12 @@ export class PdfExporter {
       const hoursBase = hasAbsence
         ? "0,00"
         : workTimeResults[i].decimal.replace(".", ",");
-      const hours = hasAbsence
-        ? `${hoursBase} (${absenceLabel})`
-        : hoursBase;
+      const hours =
+        hasAbsence && showOrderDetailsColumn
+          ? `${hoursBase}\n(${absenceLabel})`
+          : hasAbsence
+            ? `${hoursBase} (${absenceLabel})`
+            : hoursBase;
       const row = [
         dayNames[i],
         hasAbsence ? "-" : d.from || "-",
@@ -439,18 +442,18 @@ export class PdfExporter {
             font: helvetica,
             color: darkGray,
           });
-        } else if (ci === row.length - 1 && c.includes("\n")) {
+        } else if (c.includes("\n")) {
           const [line1, line2] = c.split("\n");
           page.drawText(line1, {
             x: cx,
-            y: yPosition + 8,
+            y: yPosition + 10,
             size: 8,
             font: helvetica,
             color: black,
           });
           page.drawText(line2, {
             x: cx,
-            y: yPosition - 1,
+            y: yPosition - 3,
             size: 8,
             font: helvetica,
             color: darkGray,
