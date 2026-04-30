@@ -420,5 +420,12 @@
   "status.sending": "Sending...",
   "common.menu": "Menu",
   "theme.darkMode": "Dark mode",
-  "theme.lightMode": "Light mode"
+  "theme.lightMode": "Light mode",
+  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
+  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
+  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
+  "dashboard.currentWeekRunning.title": "Current week still in progress",
+  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
+  "dashboard.allSigned.title": "All timesheets signed!",
+  "dashboard.allSigned.desc": "Nothing to do - everything is done."
 }

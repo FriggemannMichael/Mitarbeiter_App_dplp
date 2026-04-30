@@ -485,18 +485,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="flex-1">
                       <p className="text-sm sm:text-base font-bold text-slate-900">
                         {stats.openWeeks === 1
-                          ? "1 Stundenzettel noch nicht unterschrieben!"
-                          : `${stats.openWeeks} Stundenzettel noch nicht unterschrieben!`}
+                          ? t("dashboard.pendingSheets.one") ||
+                            "1 Stundenzettel noch nicht unterschrieben!"
+                          : t("dashboard.pendingSheets.many", {
+                              count: stats.openWeeks,
+                            }) ||
+                            `${stats.openWeeks} Stundenzettel noch nicht unterschrieben!`}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Jetzt antippen und abzeichnen →
+                        {t("dashboard.pendingSheets.cta") ||
+                          "Jetzt antippen und abzeichnen ->"}
                       </p>
                     </div>
                   </div>
                 </motion.button>
               );
             } else if (currentWeekRunning) {
-              // Aktuelle Woche läuft noch, keine alten Rückstände → neutral
+              // Aktuelle Woche läuft noch, keine alten Rückstände -> neutral
               return (
                 <motion.div
                   variants={item}
@@ -508,10 +513,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <div>
                       <p className="text-sm sm:text-base font-bold text-slate-900">
-                        Aktuelle Woche läuft noch
+                        {t("dashboard.currentWeekRunning.title") ||
+                          "Aktuelle Woche läuft noch"}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Keine alten offenen Zettel – alles im grünen Bereich.
+                        {t("dashboard.currentWeekRunning.desc") ||
+                          "Keine alten offenen Zettel - alles im grünen Bereich."}
                       </p>
                     </div>
                   </div>
@@ -530,10 +537,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <div>
                       <p className="text-sm sm:text-base font-bold text-slate-900">
-                        Alle Stundenzettel unterschrieben!
+                        {t("dashboard.allSigned.title") || "Alle Stundenzettel unterschrieben!"}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Nichts zu tun – alles erledigt.
+                        {t("dashboard.allSigned.desc") ||
+                          "Nichts zu tun - alles erledigt."}
                       </p>
                     </div>
                   </div>

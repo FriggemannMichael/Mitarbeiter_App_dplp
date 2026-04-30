@@ -420,5 +420,12 @@
   "status.sending": "Wird gesendet...",
   "common.menu": "Men?",
   "theme.darkMode": "Dunkelmodus",
-  "theme.lightMode": "Hellmodus"
+  "theme.lightMode": "Hellmodus",
+  "dashboard.pendingSheets.one": "1 Stundenzettel noch nicht unterschrieben!",
+  "dashboard.pendingSheets.many": "{{count}} Stundenzettel noch nicht unterschrieben!",
+  "dashboard.pendingSheets.cta": "Jetzt antippen und abzeichnen ->",
+  "dashboard.currentWeekRunning.title": "Aktuelle Woche läuft noch",
+  "dashboard.currentWeekRunning.desc": "Keine alten offenen Zettel - alles im grünen Bereich.",
+  "dashboard.allSigned.title": "Alle Stundenzettel unterschrieben!",
+  "dashboard.allSigned.desc": "Nichts zu tun - alles erledigt."
 }
