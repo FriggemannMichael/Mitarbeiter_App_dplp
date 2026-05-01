@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from api.helpers import error_response, success_response
-from api.models import EmployeeDevice, Timesheet
+from api.models import AuditLog, EmployeeDevice, Timesheet
 from api.services.auth_service import (
     ROLE_BACKOFFICE,
     ROLE_BRANCH_MANAGER,
@@ -18,6 +18,7 @@ from api.services.auth_service import (
     ROLE_VIEWER,
     require_roles,
 )
+from api.services.audit_service import audit
 from api.services.config_service import load_config
 from api.services.tenant_service import get_request_customer_key
 
@@ -49,6 +50,13 @@ VALID_REVIEW_STATUSES = {
     REVIEW_STATUS_REJECTED,
 }
 
+PORTAL_AUDIT_ACTIONS = {
+    "PORTAL_TIMESHEET_REVIEWED",
+    "PORTAL_TIMESHEET_APPROVED",
+    "PORTAL_TIMESHEET_REJECTED",
+    "PORTAL_TIMESHEET_COMMENTED",
+}
+
 
 def _current_week_identity() -> tuple[int, int]:
     now = timezone.localtime()
@@ -78,6 +86,34 @@ def _extract_review_meta(week_data: dict) -> dict:
     if not isinstance(review, dict):
         review = {}
     return review
+
+
+def _append_review_history(
+    week_data: dict,
+    *,
+    action: str,
+    actor: str,
+    actor_role: str,
+    comment: str = "",
+    status: str = "",
+) -> list[dict]:
+    review = _extract_review_meta(week_data)
+    history = review.get("history") or []
+    if not isinstance(history, list):
+        history = []
+
+    entry = {
+        "timestamp": timezone.now().isoformat(),
+        "action": action,
+        "status": status,
+        "actor": actor,
+        "actorRole": actor_role,
+        "comment": comment,
+    }
+    history.append(entry)
+    review["history"] = history[-100:]
+    week_data["portalReview"] = review
+    return review["history"]
 
 
 def _derive_review_status(week_data: dict) -> str:
@@ -139,7 +175,25 @@ def _serialize_timesheet_portal(timesheet: Timesheet) -> dict:
         "reviewed_by": review.get("reviewedBy"),
         "reviewed_at": review.get("reviewedAt"),
         "rejection_reason": review.get("rejectionReason"),
+        "customer_comment": review.get("customerComment") or "",
+        "history": review.get("history") or [],
         "updated_at": timesheet.updated_at.isoformat() if timesheet.updated_at else None,
+    }
+
+
+def _serialize_audit_entry(entry: AuditLog) -> dict:
+    details = entry.details or {}
+    return {
+        "id": entry.id,
+        "action": entry.action,
+        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        "timesheet_id": details.get("timesheetId"),
+        "sheet_id": details.get("sheetId"),
+        "employee_name": details.get("employeeName"),
+        "status": details.get("status"),
+        "comment": details.get("comment") or details.get("rejectionReason") or "",
+        "actor": details.get("actor"),
+        "actor_role": details.get("actorRole"),
     }
 
 
@@ -348,6 +402,26 @@ def portal_absences(request):
     return success_response(items)
 
 
+@require_roles(*PORTAL_READ_ROLES)
+@require_http_methods(["GET"])
+def portal_audit_log(request):
+    customer_key = get_request_customer_key(request)
+    timesheet_id = _parse_int(request.GET.get("timesheetId"))
+    queryset = AuditLog.objects.filter(
+        customer_key=customer_key,
+        action__in=PORTAL_AUDIT_ACTIONS,
+    ).order_by("-created_at", "-id")
+
+    if timesheet_id is not None:
+        queryset = queryset.filter(details__timesheetId=timesheet_id)
+
+    limit = _parse_int(request.GET.get("limit")) or 100
+    if limit > 0:
+        queryset = queryset[: min(limit, 250)]
+
+    return success_response([_serialize_audit_entry(entry) for entry in queryset])
+
+
 @csrf_exempt
 @require_roles(*PORTAL_APPROVAL_ROLES)
 @require_http_methods(["POST"])
@@ -359,6 +433,7 @@ def portal_update_timesheet_status(request, timesheet_id: int):
 
     next_status = (body.get("status") or "").strip().lower()
     rejection_reason = (body.get("rejectionReason") or "").strip()
+    customer_comment = (body.get("comment") or "").strip()
     if next_status not in VALID_REVIEW_STATUSES:
         return error_response("Invalid status", 400)
 
@@ -381,14 +456,25 @@ def portal_update_timesheet_status(request, timesheet_id: int):
         return error_response("rejectionReason required", 400)
 
     actor = getattr(request, "admin_user", {}) or {}
+    actor_name = actor.get("username") or actor.get("sub") or "portal-user"
+    actor_role = actor.get("role") or ""
     portal_review = _extract_review_meta(week_data)
     portal_review.update({
         "status": next_status,
         "reviewedAt": timezone.now().isoformat(),
-        "reviewedBy": actor.get("sub") or actor.get("username") or "portal-user",
+        "reviewedBy": actor_name,
         "rejectionReason": rejection_reason if next_status == REVIEW_STATUS_REJECTED else "",
+        "customerComment": customer_comment or portal_review.get("customerComment") or "",
     })
     week_data["portalReview"] = portal_review
+    _append_review_history(
+        week_data,
+        action=f"status:{next_status}",
+        actor=actor_name,
+        actor_role=actor_role,
+        comment=rejection_reason or customer_comment,
+        status=next_status,
+    )
 
     if next_status == REVIEW_STATUS_REJECTED:
         week_data["status"] = "OPEN"
@@ -396,6 +482,80 @@ def portal_update_timesheet_status(request, timesheet_id: int):
 
     timesheet.week_data = week_data
     timesheet.save(update_fields=["week_data", "updated_at"])
+    audit(
+        f"PORTAL_TIMESHEET_{next_status.upper()}",
+        {
+            "timesheetId": timesheet.id,
+            "sheetId": timesheet.sheet_id,
+            "employeeName": _extract_employee_name(timesheet),
+            "status": next_status,
+            "comment": customer_comment,
+            "rejectionReason": rejection_reason,
+            "actor": actor_name,
+            "actorRole": actor_role,
+        },
+        request.META.get("REMOTE_ADDR"),
+        customer_key=customer_key,
+    )
+    return success_response(_serialize_timesheet_portal(timesheet))
+
+
+@csrf_exempt
+@require_roles(*PORTAL_APPROVAL_ROLES)
+@require_http_methods(["POST"])
+def portal_add_timesheet_comment(request, timesheet_id: int):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return error_response("Invalid JSON", 400)
+
+    comment = (body.get("comment") or "").strip()
+    if not comment:
+        return error_response("comment required", 400)
+
+    customer_key = get_request_customer_key(request, body=body)
+    timesheet = (
+        Timesheet.objects
+        .filter(customer_key=customer_key, id=timesheet_id, archived_at__isnull=True)
+        .select_related("employee_device")
+        .first()
+    )
+    if not timesheet:
+        return error_response("Timesheet not found", 404)
+
+    actor = getattr(request, "admin_user", {}) or {}
+    actor_name = actor.get("username") or actor.get("sub") or "portal-user"
+    actor_role = actor.get("role") or ""
+
+    week_data = dict(timesheet.week_data or {})
+    review = _extract_review_meta(week_data)
+    review["customerComment"] = comment
+    week_data["portalReview"] = review
+    _append_review_history(
+        week_data,
+        action="comment",
+        actor=actor_name,
+        actor_role=actor_role,
+        comment=comment,
+        status=_derive_review_status(week_data),
+    )
+
+    timesheet.week_data = week_data
+    timesheet.save(update_fields=["week_data", "updated_at"])
+    audit(
+        "PORTAL_TIMESHEET_COMMENTED",
+        {
+            "timesheetId": timesheet.id,
+            "sheetId": timesheet.sheet_id,
+            "employeeName": _extract_employee_name(timesheet),
+            "status": _derive_review_status(week_data),
+            "comment": comment,
+            "actor": actor_name,
+            "actorRole": actor_role,
+        },
+        request.META.get("REMOTE_ADDR"),
+        customer_key=customer_key,
+    )
     return success_response(_serialize_timesheet_portal(timesheet))
 
 

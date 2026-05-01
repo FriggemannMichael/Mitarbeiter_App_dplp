@@ -12,6 +12,8 @@ from api.views.customer_portal import (
     portal_employees,
     portal_timesheets,
     portal_absences,
+    portal_audit_log,
+    portal_add_timesheet_comment,
     portal_update_timesheet_status,
     portal_timesheets_csv,
 )
@@ -51,7 +53,9 @@ urlpatterns = [
     path('api/portal/employees', portal_employees),
     path('api/portal/timesheets', portal_timesheets),
     path('api/portal/absences', portal_absences),
+    path('api/portal/audit-log', portal_audit_log),
     path('api/portal/timesheets.csv', portal_timesheets_csv),
+    path('api/portal/timesheets/<int:timesheet_id>/comment', portal_add_timesheet_comment),
     path('api/portal/timesheets/<int:timesheet_id>/status', portal_update_timesheet_status),
 
     # Email + PDF – ACHTUNG: send-pdf hat KEIN /api/ Prefix (wie PHP)

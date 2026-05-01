@@ -6,26 +6,28 @@ import {
   Clock3,
   Download,
   LogOut,
+  MessageSquare,
+  ShieldCheck,
   Users,
-  User,
   XCircle,
 } from "lucide-react";
 
 import {
   apiService,
   type PortalAbsenceDto,
+  type PortalAuditLogDto,
   type PortalEmployeeDto,
   type PortalSummaryDto,
   type PortalTimesheetDto,
 } from "../services/apiService";
 import { portalAuthService } from "../services/portalAuthService";
 
-type PortalTab = "dashboard" | "employees" | "timesheets" | "absences";
+type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit";
 
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "Geprüft",
+  reviewed: "Geprueft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -38,6 +40,10 @@ const statusClasses: Record<string, string> = {
   rejected: "bg-rose-100 text-rose-800",
 };
 
+function formatStatus(status?: string): string {
+  return statusLabels[status || ""] || status || "-";
+}
+
 export const CustomerPortalDashboard: React.FC = () => {
   const currentUser = portalAuthService.getCurrentUser();
   const [activeTab, setActiveTab] = useState<PortalTab>("dashboard");
@@ -45,6 +51,7 @@ export const CustomerPortalDashboard: React.FC = () => {
   const [employees, setEmployees] = useState<PortalEmployeeDto[]>([]);
   const [timesheets, setTimesheets] = useState<PortalTimesheetDto[]>([]);
   const [absences, setAbsences] = useState<PortalAbsenceDto[]>([]);
+  const [auditEntries, setAuditEntries] = useState<PortalAuditLogDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [timesheetStatusFilter, setTimesheetStatusFilter] = useState("");
@@ -54,27 +61,49 @@ export const CustomerPortalDashboard: React.FC = () => {
     setIsLoading(true);
     setError("");
     try {
-      const [summaryResponse, employeesResponse, timesheetsResponse, absencesResponse] =
-        await Promise.all([
-          apiService.getPortalSummary(),
-          apiService.getPortalEmployees(),
-          apiService.getPortalTimesheets(
-            timesheetStatusFilter ? { status: timesheetStatusFilter } : undefined,
-          ),
-          apiService.getPortalAbsences(),
-        ]);
+      const [
+        summaryResponse,
+        employeesResponse,
+        timesheetsResponse,
+        absencesResponse,
+        auditResponse,
+      ] = await Promise.all([
+        apiService.getPortalSummary(),
+        apiService.getPortalEmployees(),
+        apiService.getPortalTimesheets(
+          timesheetStatusFilter ? { status: timesheetStatusFilter } : undefined,
+        ),
+        apiService.getPortalAbsences(),
+        apiService.getPortalAuditLog({ limit: 100 }),
+      ]);
 
-      if (!summaryResponse.success) throw new Error(summaryResponse.error || "Portal-Übersicht konnte nicht geladen werden");
-      if (!employeesResponse.success) throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
-      if (!timesheetsResponse.success) throw new Error(timesheetsResponse.error || "Stundenzettel konnten nicht geladen werden");
-      if (!absencesResponse.success) throw new Error(absencesResponse.error || "Abwesenheiten konnten nicht geladen werden");
+      if (!summaryResponse.success) {
+        throw new Error(summaryResponse.error || "Portal-Uebersicht konnte nicht geladen werden");
+      }
+      if (!employeesResponse.success) {
+        throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
+      }
+      if (!timesheetsResponse.success) {
+        throw new Error(timesheetsResponse.error || "Stundenzettel konnten nicht geladen werden");
+      }
+      if (!absencesResponse.success) {
+        throw new Error(absencesResponse.error || "Abwesenheiten konnten nicht geladen werden");
+      }
+      if (!auditResponse.success) {
+        throw new Error(auditResponse.error || "Audit-Log konnte nicht geladen werden");
+      }
 
       setSummary(summaryResponse.data || null);
       setEmployees(employeesResponse.data || []);
       setTimesheets(timesheetsResponse.data || []);
       setAbsences(absencesResponse.data || []);
+      setAuditEntries(auditResponse.data || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Portal-Daten konnten nicht geladen werden");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Portal-Daten konnten nicht geladen werden",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -89,6 +118,11 @@ export const CustomerPortalDashboard: React.FC = () => {
     [employees],
   );
 
+  const submittedTimesheets = useMemo(
+    () => timesheets.filter((item) => item.status === "submitted").slice(0, 8),
+    [timesheets],
+  );
+
   const handleLogout = async () => {
     await portalAuthService.logout();
     window.location.reload();
@@ -98,6 +132,10 @@ export const CustomerPortalDashboard: React.FC = () => {
     timesheetId: number,
     status: "reviewed" | "approved" | "rejected",
   ) => {
+    const comment =
+      status !== "approved"
+        ? window.prompt("Optionalen Kommentar fuer den Kundenverlauf eingeben:", "") || ""
+        : "";
     const rejectionReason =
       status === "rejected"
         ? window.prompt("Bitte Ablehnungsgrund eingeben:", "") || ""
@@ -110,6 +148,7 @@ export const CustomerPortalDashboard: React.FC = () => {
     try {
       const response = await apiService.updatePortalTimesheetStatus(timesheetId, {
         status,
+        comment,
         rejectionReason,
       });
       if (!response.success) {
@@ -125,6 +164,29 @@ export const CustomerPortalDashboard: React.FC = () => {
     }
   };
 
+  const handleAddComment = async (timesheetId: number) => {
+    const comment = window.prompt("Kommentar oder Anmerkung zum Stundenzettel:", "") || "";
+    if (!comment.trim()) {
+      return;
+    }
+
+    try {
+      const response = await apiService.addPortalTimesheetComment(timesheetId, {
+        comment,
+      });
+      if (!response.success) {
+        throw new Error(response.error || "Kommentar konnte nicht gespeichert werden");
+      }
+      await loadPortalData();
+    } catch (actionError) {
+      window.alert(
+        actionError instanceof Error
+          ? actionError.message
+          : "Kommentar konnte nicht gespeichert werden",
+      );
+    }
+  };
+
   const handleCsvExport = () => {
     const header = [
       "Mitarbeiter",
@@ -136,6 +198,7 @@ export const CustomerPortalDashboard: React.FC = () => {
       "Stunden",
       "Abwesenheitstage",
       "Unterschrift",
+      "Kommentar",
       "Aktualisiert",
     ];
 
@@ -145,10 +208,11 @@ export const CustomerPortalDashboard: React.FC = () => {
       timesheet.week_number,
       timesheet.sheet_id,
       timesheet.customer,
-      statusLabels[timesheet.status] || timesheet.status,
+      formatStatus(timesheet.status),
       timesheet.hours_total,
       timesheet.absence_days,
       timesheet.has_signature ? "ja" : "nein",
+      timesheet.customer_comment || "",
       timesheet.updated_at || "",
     ]);
 
@@ -180,7 +244,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                 Kundenportal
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Verwaltung & Freigaben
+                Freigaben und Kundenpruefung
               </h1>
               <p className="text-sm text-slate-600 mt-2">
                 Angemeldet als {currentUser?.username} ({currentUser?.role || "user"})
@@ -222,15 +286,17 @@ export const CustomerPortalDashboard: React.FC = () => {
               },
               {
                 label: "Fehlende Stundenzettel",
-                value: summary?.metrics.missing_timesheets ?? employeeCountWithoutCurrentWeekSheet,
+                value:
+                  summary?.metrics.missing_timesheets ??
+                  employeeCountWithoutCurrentWeekSheet,
                 suffix: "",
                 icon: <Users className="w-5 h-5" />,
               },
               {
-                label: "Aktuelle Abwesenheitstage",
-                value: summary?.metrics.current_absence_days ?? 0,
+                label: "Audit-Eintraege",
+                value: auditEntries.length,
                 suffix: "",
-                icon: <User className="w-5 h-5" />,
+                icon: <ShieldCheck className="w-5 h-5" />,
               },
             ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -256,6 +322,7 @@ export const CustomerPortalDashboard: React.FC = () => {
             { id: "employees", label: "Mitarbeiter" },
             { id: "timesheets", label: "Stundenzettel" },
             { id: "absences", label: "Abwesenheiten" },
+            { id: "audit", label: "Audit-Log" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -291,28 +358,49 @@ export const CustomerPortalDashboard: React.FC = () => {
                     Eingereichte Stundenzettel
                   </h2>
                   <div className="space-y-3">
-                    {timesheets.filter((item) => item.status === "submitted").slice(0, 8).map((timesheet) => (
-                      <div key={timesheet.id} className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    {submittedTimesheets.map((timesheet) => (
+                      <div
+                        key={timesheet.id}
+                        className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+                      >
                         <div>
                           <div className="font-semibold text-slate-900">
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} · {timesheet.customer || "Kein Kunde"}
+                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
+                            {timesheet.customer || "Kein Kunde"}
                           </div>
+                          {timesheet.customer_comment && (
+                            <div className="text-sm text-slate-500 mt-2">
+                              Kommentar: {timesheet.customer_comment}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[timesheet.status] || statusClasses.open}`}>
-                            {statusLabels[timesheet.status] || timesheet.status}
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              statusClasses[timesheet.status] || statusClasses.open
+                            }`}
+                          >
+                            {formatStatus(timesheet.status)}
                           </span>
                           {canApprove && (
                             <>
                               <button
                                 type="button"
+                                onClick={() => handleAddComment(timesheet.id)}
+                                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Kommentar
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Prüfen
+                                Pruefen
                               </button>
                               <button
                                 type="button"
@@ -335,8 +423,10 @@ export const CustomerPortalDashboard: React.FC = () => {
                         </div>
                       </div>
                     ))}
-                    {timesheets.filter((item) => item.status === "submitted").length === 0 && (
-                      <div className="text-sm text-slate-500">Aktuell keine eingereichten Stundenzettel.</div>
+                    {submittedTimesheets.length === 0 && (
+                      <div className="text-sm text-slate-500">
+                        Aktuell keine eingereichten Stundenzettel.
+                      </div>
                     )}
                   </div>
                 </section>
@@ -347,12 +437,18 @@ export const CustomerPortalDashboard: React.FC = () => {
                   </h2>
                   <div className="space-y-2">
                     {(summary?.missing_employees || []).map((employeeName) => (
-                      <div key={employeeName} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      <div
+                        key={employeeName}
+                        className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                      >
                         {employeeName}
                       </div>
                     ))}
                     {(summary?.missing_employees || []).length === 0 && (
-                      <div className="text-sm text-slate-500">Für die laufende Woche sind aktuell keine fehlenden Stundenzettel erkannt.</div>
+                      <div className="text-sm text-slate-500">
+                        Fuer die laufende Woche sind aktuell keine fehlenden
+                        Stundenzettel erkannt.
+                      </div>
                     )}
                   </div>
                 </section>
@@ -376,16 +472,24 @@ export const CustomerPortalDashboard: React.FC = () => {
                   <tbody>
                     {employees.map((employee) => (
                       <tr key={employee.employee_name} className="border-b border-slate-100">
-                        <td className="py-3 pr-4 font-medium text-slate-900">{employee.employee_name}</td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {employee.employee_name}
+                        </td>
                         <td className="py-3 pr-4">{employee.timesheet_count}</td>
                         <td className="py-3 pr-4">{employee.current_week_hours}h</td>
                         <td className="py-3 pr-4">{employee.current_absence_days}</td>
                         <td className="py-3 pr-4">
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[employee.latest_status] || statusClasses.open}`}>
-                            {statusLabels[employee.latest_status] || employee.latest_status}
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              statusClasses[employee.latest_status] || statusClasses.open
+                            }`}
+                          >
+                            {formatStatus(employee.latest_status)}
                           </span>
                         </td>
-                        <td className="py-3 pr-4">{employee.has_current_week_timesheet ? "Ja" : "Nein"}</td>
+                        <td className="py-3 pr-4">
+                          {employee.has_current_week_timesheet ? "Ja" : "Nein"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -406,7 +510,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <option value="">Alle Status</option>
                       <option value="open">Offen</option>
                       <option value="submitted">Eingereicht</option>
-                      <option value="reviewed">Geprüft</option>
+                      <option value="reviewed">Geprueft</option>
                       <option value="approved">Freigegeben</option>
                       <option value="rejected">Abgelehnt</option>
                     </select>
@@ -428,7 +532,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <th className="py-2 pr-4">Woche</th>
                       <th className="py-2 pr-4">Kunde</th>
                       <th className="py-2 pr-4">Stunden</th>
-                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">Status und Verlauf</th>
                       <th className="py-2 pr-4">Unterschrift</th>
                       {canApprove && <th className="py-2 pr-4">Aktion</th>}
                     </tr>
@@ -436,16 +540,54 @@ export const CustomerPortalDashboard: React.FC = () => {
                   <tbody>
                     {timesheets.map((timesheet) => (
                       <tr key={timesheet.id} className="border-b border-slate-100 align-top">
-                        <td className="py-3 pr-4 font-medium text-slate-900">{timesheet.employee_name}</td>
-                        <td className="py-3 pr-4">KW {timesheet.week_number}/{timesheet.week_year} · Zettel {timesheet.sheet_id}</td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {timesheet.employee_name}
+                        </td>
+                        <td className="py-3 pr-4">
+                          KW {timesheet.week_number}/{timesheet.week_year} · Zettel{" "}
+                          {timesheet.sheet_id}
+                        </td>
                         <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
                         <td className="py-3 pr-4">{timesheet.hours_total}h</td>
                         <td className="py-3 pr-4">
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[timesheet.status] || statusClasses.open}`}>
-                            {statusLabels[timesheet.status] || timesheet.status}
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              statusClasses[timesheet.status] || statusClasses.open
+                            }`}
+                          >
+                            {formatStatus(timesheet.status)}
                           </span>
                           {timesheet.rejection_reason && (
-                            <div className="text-xs text-rose-700 mt-2">{timesheet.rejection_reason}</div>
+                            <div className="text-xs text-rose-700 mt-2">
+                              Ablehnungsgrund: {timesheet.rejection_reason}
+                            </div>
+                          )}
+                          {timesheet.customer_comment && (
+                            <div className="text-xs text-slate-600 mt-2">
+                              Kommentar: {timesheet.customer_comment}
+                            </div>
+                          )}
+                          {(timesheet.history || []).length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {(timesheet.history || [])
+                                .slice(-3)
+                                .reverse()
+                                .map((entry, index) => (
+                                  <div
+                                    key={`${timesheet.id}-${entry.timestamp}-${index}`}
+                                    className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                                  >
+                                    <div className="font-medium text-slate-700">
+                                      {entry.actor || "Unbekannt"} ·{" "}
+                                      {formatStatus(entry.status || entry.action)}
+                                    </div>
+                                    <div>{entry.timestamp}</div>
+                                    {entry.comment && (
+                                      <div className="mt-1">{entry.comment}</div>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
                           )}
                         </td>
                         <td className="py-3 pr-4">{timesheet.has_signature ? "Ja" : "Nein"}</td>
@@ -454,10 +596,18 @@ export const CustomerPortalDashboard: React.FC = () => {
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
+                                onClick={() => handleAddComment(timesheet.id)}
+                                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Kommentar
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Prüfen
+                                Pruefen
                               </button>
                               <button
                                 type="button"
@@ -485,7 +635,9 @@ export const CustomerPortalDashboard: React.FC = () => {
 
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
-                <h2 className="text-lg font-bold text-slate-900 mb-4">Abwesenheitsübersicht</h2>
+                <h2 className="text-lg font-bold text-slate-900 mb-4">
+                  Abwesenheitsuebersicht
+                </h2>
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-200">
@@ -499,15 +651,66 @@ export const CustomerPortalDashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {absences.map((absence) => (
-                      <tr key={`${absence.timesheet_id}-${absence.date}-${absence.absence}`} className="border-b border-slate-100">
+                      <tr
+                        key={`${absence.timesheet_id}-${absence.date}-${absence.absence}`}
+                        className="border-b border-slate-100"
+                      >
                         <td className="py-3 pr-4">{absence.date}</td>
-                        <td className="py-3 pr-4 font-medium text-slate-900">{absence.employee_name}</td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {absence.employee_name}
+                        </td>
                         <td className="py-3 pr-4">{absence.absence}</td>
                         <td className="py-3 pr-4">{absence.absence_note || "-"}</td>
-                        <td className="py-3 pr-4">KW {absence.week_number}/{absence.week_year}</td>
+                        <td className="py-3 pr-4">
+                          KW {absence.week_number}/{absence.week_year}
+                        </td>
                         <td className="py-3 pr-4">{absence.customer || "Kein Kunde"}</td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
+
+            {activeTab === "audit" && (
+              <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
+                <h2 className="text-lg font-bold text-slate-900 mb-4">
+                  Audit-Log Kundenportal
+                </h2>
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200">
+                      <th className="py-2 pr-4">Zeitpunkt</th>
+                      <th className="py-2 pr-4">Mitarbeiter</th>
+                      <th className="py-2 pr-4">Zettel</th>
+                      <th className="py-2 pr-4">Aktion</th>
+                      <th className="py-2 pr-4">Benutzer</th>
+                      <th className="py-2 pr-4">Kommentar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditEntries.map((entry) => (
+                      <tr key={entry.id} className="border-b border-slate-100 align-top">
+                        <td className="py-3 pr-4">{entry.created_at || "-"}</td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {entry.employee_name || "-"}
+                        </td>
+                        <td className="py-3 pr-4">{entry.sheet_id || "-"}</td>
+                        <td className="py-3 pr-4">{formatStatus(entry.status || entry.action)}</td>
+                        <td className="py-3 pr-4">
+                          {entry.actor || "-"}
+                          {entry.actor_role ? ` (${entry.actor_role})` : ""}
+                        </td>
+                        <td className="py-3 pr-4">{entry.comment || "-"}</td>
+                      </tr>
+                    ))}
+                    {auditEntries.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-slate-500">
+                          Noch keine Audit-Eintraege vorhanden.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </section>

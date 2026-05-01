@@ -88,6 +88,15 @@ export interface PortalTimesheetDto {
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   rejection_reason?: string | null;
+  customer_comment?: string | null;
+  history?: Array<{
+    timestamp: string;
+    action: string;
+    status?: string;
+    actor?: string;
+    actorRole?: string;
+    comment?: string;
+  }>;
   updated_at?: string | null;
 }
 
@@ -101,6 +110,19 @@ export interface PortalAbsenceDto {
   week_number: number;
   sheet_id: string;
   customer: string;
+}
+
+export interface PortalAuditLogDto {
+  id: number;
+  action: string;
+  created_at?: string | null;
+  timesheet_id?: number | null;
+  sheet_id?: string | null;
+  employee_name?: string | null;
+  status?: string | null;
+  comment?: string | null;
+  actor?: string | null;
+  actor_role?: string | null;
 }
 
 interface EmployeeDeviceResponse {
@@ -417,15 +439,41 @@ class ApiService {
     );
   }
 
+  async getPortalAuditLog(params?: {
+    timesheetId?: number;
+    limit?: number;
+  }): Promise<ApiResponse<PortalAuditLogDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.timesheetId != null) search.set("timesheetId", String(params.timesheetId));
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    const suffix = search.toString();
+    return this.get<PortalAuditLogDto[]>(
+      `/api/portal/audit-log${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
   async updatePortalTimesheetStatus(
     timesheetId: number,
     payload: {
       status: "reviewed" | "approved" | "rejected";
       rejectionReason?: string;
+      comment?: string;
     },
   ): Promise<ApiResponse<PortalTimesheetDto>> {
     return this.post<PortalTimesheetDto>(
       `/api/portal/timesheets/${timesheetId}/status`,
+      payload,
+    );
+  }
+
+  async addPortalTimesheetComment(
+    timesheetId: number,
+    payload: {
+      comment: string;
+    },
+  ): Promise<ApiResponse<PortalTimesheetDto>> {
+    return this.post<PortalTimesheetDto>(
+      `/api/portal/timesheets/${timesheetId}/comment`,
       payload,
     );
   }
