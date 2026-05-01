@@ -13,6 +13,7 @@ import {
   NotificationProvider,
   useNotification,
 } from "./contexts/NotificationContext";
+import { useConfig } from "./contexts/ConfigContext";
 import { ToastContainer } from "./components/Toast";
 import { apiService } from "./services/apiService";
 import { logger } from "./services/logger";
@@ -22,6 +23,7 @@ import "./i18n"; // i18n initialisieren
 function AppContent() {
   const { t } = useTranslation();
   const { error, notifications, removeNotification } = useNotification();
+  const { isLoading: isConfigLoading } = useConfig();
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -68,7 +70,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (loading || isAdminRoute || !isOnboarded) {
+    if (loading || isConfigLoading || isAdminRoute || !isOnboarded) {
       return;
     }
 
@@ -158,7 +160,7 @@ function AppContent() {
     return () => {
       isCancelled = true;
     };
-  }, [isAdminRoute, isOnboarded, loading]);
+  }, [isAdminRoute, isOnboarded, isConfigLoading, loading]);
 
   // Dark Mode nur im App-Bereich aktivieren (nicht im Welcome/Login-Bereich)
   useEffect(() => {
@@ -182,7 +184,7 @@ function AppContent() {
   };
 
   // Loading-Screen
-  if (loading) {
+  if (loading || isConfigLoading) {
     return (
       <div className="min-h-screen gradient-bg flex items-center justify-center">
         <div className="text-center space-y-4">

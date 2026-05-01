@@ -34,6 +34,7 @@ import React, {
 import type { WeekData, DayData, WeekStats } from "../types/weekdata.types";
 import { storage, weekUtils } from "../utils/storage";
 import { apiService } from "../services/apiService";
+import { useConfig } from "./ConfigContext";
 import {
   migrateWeekDataComplete,
   needsMigration,
@@ -180,6 +181,7 @@ const WeekDataContext = createContext<WeekDataContextType | undefined>(
 export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { isLoading: isConfigLoading } = useConfig();
   // INJECTED CONTEXTS
   const timeCalc = useTimeCalculation();
   const signatureWorkflow = useSignatureWorkflow();
@@ -409,7 +411,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         let data: WeekData | null = null;
         let backendSheets: WeekData[] = [];
 
-        if (apiService.canUseEmployeeTimesheetSync()) {
+        if (!isConfigLoading && apiService.canUseEmployeeTimesheetSync()) {
           try {
           const listResponse = await apiService.listTimesheets<WeekData>({
             year,
@@ -493,16 +495,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsLoading(false);
       }
     },
-    [createEmptyWeek, shiftConfig],
+    [createEmptyWeek, isConfigLoading, shiftConfig],
   );
-
-  /**
-   * Auto-Navigation: Beim ersten Laden automatisch zur aktuellen Woche navigieren
-   */
-  useEffect(() => {
-    const current = weekUtils.getCurrentWeek();
-    loadWeek(current.year, current.week, 1);
-  }, []); // Nur beim ersten Mount ausführen
 
   /**
    * Speichert aktuelle Woche
@@ -1130,6 +1124,10 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Initial Load
   useEffect(() => {
+    if (isConfigLoading) {
+      return;
+    }
+
     const loadInitialWeek = async () => {
       const systemWeek = weekUtils.getCurrentWeek();
       devLog("[WeekDataContext] Initial Load - System-Woche:", systemWeek);
@@ -1138,8 +1136,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     loadInitialWeek();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isConfigLoading, loadWeek]);
 
   const value: WeekDataContextType = {
     currentWeek,

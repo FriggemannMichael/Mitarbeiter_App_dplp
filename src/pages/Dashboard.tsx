@@ -58,7 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToWeek,
 }) => {
   const { t, i18n } = useTranslation();
-  const { config } = useConfig();
+  const { config, isLoading: isConfigLoading } = useConfig();
   const showSickDashboardCard = isFeatureEnabled(
     config?.technical,
     "dashboard_show_sick",
@@ -124,6 +124,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const currentYear = currentWeekData.year;
 
   useEffect(() => {
+    if (isConfigLoading) {
+      return;
+    }
+
     let isCancelled = false;
 
     const loadDashboardWeeks = async () => {
@@ -161,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [isConfigLoading]);
 
   const sourceWeeks = useMemo(() => {
     if (backendWeeks !== null) {
