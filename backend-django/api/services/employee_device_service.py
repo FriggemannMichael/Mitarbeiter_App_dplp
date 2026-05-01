@@ -16,7 +16,9 @@ EMPLOYEE_DEVICE_COOKIE_SECURE = os.environ.get('EMPLOYEE_DEVICE_COOKIE_SECURE', 
     'yes',
     'on',
 )
-EMPLOYEE_DEVICE_COOKIE_SAMESITE = (os.environ.get('EMPLOYEE_DEVICE_COOKIE_SAMESITE', 'Lax') or 'Lax').strip().capitalize()
+EMPLOYEE_DEVICE_COOKIE_SAMESITE = (
+    os.environ.get('EMPLOYEE_DEVICE_COOKIE_SAMESITE', 'None') or 'None'
+).strip().capitalize()
 EMPLOYEE_CSRF_COOKIE_NAME = os.environ.get('EMPLOYEE_CSRF_COOKIE_NAME', 'employee_csrf')
 EMPLOYEE_CSRF_HEADER_NAME = os.environ.get('EMPLOYEE_CSRF_HEADER_NAME', 'X-Employee-CSRF')
 EMPLOYEE_DEVICE_COOKIE_MAX_AGE = int(

@@ -27,6 +27,7 @@ function AppContent() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const initializedEmployeeDeviceRef = useRef<string>("");
   const migratedEmployeeWeeksRef = useRef<string>("");
+  const failedEmployeeDeviceInitRef = useRef<string>("");
   const isAdminRoute =
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
@@ -78,6 +79,10 @@ function AppContent() {
     }
 
     if (initializedEmployeeDeviceRef.current === employeeName) {
+      return;
+    }
+
+    if (failedEmployeeDeviceInitRef.current === employeeName) {
       return;
     }
 
@@ -141,6 +146,9 @@ function AppContent() {
           }
         }
       } catch (error) {
+        if (!isCancelled) {
+          failedEmployeeDeviceInitRef.current = employeeName;
+        }
         logger.warn("Employee device initialization failed", {
           component: "App",
           data: {

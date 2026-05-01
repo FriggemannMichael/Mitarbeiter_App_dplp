@@ -81,7 +81,10 @@ export class ConfigManager {
             isLoaded: true,
           };
 
-          const normalizedConfig = this.normalizeConfig(config);
+          const normalizedConfig = this.reconcileTechnicalEndpoints(
+            this.normalizeConfig(config),
+            staticConfigJsonRaw,
+          );
           const runtimeApiEndpoint = normalizedConfig.technical?.api_endpoint;
           if (
             typeof runtimeApiEndpoint === "string" &&
@@ -133,6 +136,28 @@ export class ConfigManager {
           const responseData = response.data as any;
           const apiDataRaw = responseData.data || responseData; // Unwrap extra "data" layer
           const apiData = this.migrateLegacyConfigShape(apiDataRaw);
+          const staticApiEndpoint = staticConfigJsonRaw?.technical?.api_endpoint;
+          const apiRuntimeEndpoint = apiData?.technical?.api_endpoint;
+          const shouldKeepStaticApiEndpoint =
+            this.isAbsoluteUrl(staticApiEndpoint) &&
+            typeof apiRuntimeEndpoint === "string" &&
+            apiRuntimeEndpoint.trim() !== "" &&
+            !this.isAbsoluteUrl(apiRuntimeEndpoint);
+
+          if (shouldKeepStaticApiEndpoint) {
+            apiData.technical = {
+              ...(apiData.technical || {}),
+              api_endpoint: staticApiEndpoint.trim(),
+            };
+
+            if (
+              typeof staticConfigJsonRaw?.technical?.backend_domain === "string" &&
+              staticConfigJsonRaw.technical.backend_domain.trim() !== ""
+            ) {
+              apiData.technical.backend_domain =
+                staticConfigJsonRaw.technical.backend_domain.trim();
+            }
+          }
           const defaults = this.getDefaultConfiguration();
 
           const config: AppConfiguration = {
@@ -446,6 +471,55 @@ export class ConfigManager {
 
   private getRuntimeApiEndpoint(): string {
     return `${this.getRuntimeOrigin()}/backend`;
+  }
+
+  private isAbsoluteUrl(value?: string | null): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const trimmed = value.trim().toLowerCase();
+    return trimmed.startsWith("http://") || trimmed.startsWith("https://");
+  }
+
+  private reconcileTechnicalEndpoints(
+    config: AppConfiguration,
+    staticConfigRaw: any | null,
+  ): AppConfiguration {
+    const staticEndpoint = staticConfigRaw?.technical?.api_endpoint;
+    const runtimeEndpoint = config.technical?.api_endpoint;
+
+    if (
+      !this.isAbsoluteUrl(staticEndpoint) ||
+      !runtimeEndpoint ||
+      staticEndpoint.trim() === runtimeEndpoint.trim()
+    ) {
+      return config;
+    }
+
+    const runtimeOrigin = this.getRuntimeOrigin();
+    const runtimeEndpointTrimmed = runtimeEndpoint.trim();
+    const shouldKeepStaticEndpoint =
+      !this.isAbsoluteUrl(runtimeEndpointTrimmed) ||
+      runtimeEndpointTrimmed.startsWith(`${runtimeOrigin}/`);
+
+    if (!shouldKeepStaticEndpoint) {
+      return config;
+    }
+
+    const staticBackendDomain = staticConfigRaw?.technical?.backend_domain;
+
+    return {
+      ...config,
+      technical: {
+        ...config.technical,
+        api_endpoint: staticEndpoint.trim(),
+        backend_domain:
+          typeof staticBackendDomain === "string" && staticBackendDomain.trim() !== ""
+            ? staticBackendDomain.trim()
+            : config.technical.backend_domain,
+      },
+    };
   }
 
   private getRuntimeCorsOrigins(): string[] {

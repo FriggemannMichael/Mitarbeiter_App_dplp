@@ -18,6 +18,7 @@ vi.mock("../services/apiService", () => ({
     saveTimesheet: vi.fn(),
     archiveTimesheet: vi.fn(),
     initEmployeeDevice: vi.fn(),
+    canUseEmployeeTimesheetSync: vi.fn(() => true),
   },
 }));
 

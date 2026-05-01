@@ -60,6 +60,46 @@ describe("ConfigManager", () => {
       expect(cached).toBeTruthy();
     });
 
+    it("behält statischen absoluten API-Endpunkt wenn die API nur /backend zurückliefert", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          company: { company_name: "Static GmbH" },
+          pdf: {},
+          technical: {
+            api_endpoint: "https://ze-api.mitarbeiterapp.site",
+            backend_domain: "https://ze-api.mitarbeiterapp.site",
+          },
+          work: {},
+          admin: {},
+        }),
+      });
+
+      vi.mocked(apiService.getAppConfig).mockResolvedValue({
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: {
+          company: { company_name: "API GmbH" },
+          pdf: {},
+          technical: {
+            api_endpoint: "/backend",
+            backend_domain: "https://ze.dplp.de",
+          },
+          work: {},
+        } as any,
+      });
+
+      const manager = ConfigManager.getInstance();
+      const config = await manager.loadConfiguration();
+
+      expect(config.technical.api_endpoint).toBe(
+        "https://ze-api.mitarbeiterapp.site",
+      );
+      expect(config.technical.backend_domain).toBe(
+        "https://ze-api.mitarbeiterapp.site",
+      );
+    });
+
     it("lädt von localStorage wenn API fehlt", async () => {
       const mockConfig = createMockConfig({
         company: { company_name: "Cached GmbH" } as any,
