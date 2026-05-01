@@ -1,8 +1,10 @@
 """
-Timesheet-Endpoints: save-timesheet, get-timesheet
+Timesheet-Endpoints: save-timesheet, get-timesheet, list-timesheets, archive-timesheet
 Tenant-scoped ueber customer_key.
 """
 import json
+
+from django.utils import timezone
 
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -43,6 +45,17 @@ def _serialize_timesheet(timesheet: Timesheet) -> dict:
         'updated_at': timesheet.updated_at.isoformat() if timesheet.updated_at else None,
         'weekData': timesheet.week_data,
     }
+
+
+def _get_active_timesheet_queryset(customer_key, device):
+    return (
+        Timesheet.objects
+        .filter(
+            customer_key=customer_key,
+            employee_device=device,
+            archived_at__isnull=True,
+        )
+    )
 
 
 @csrf_exempt
@@ -86,6 +99,8 @@ def save_timesheet(request):
         defaults={
             'user_id': 1,
             'week_data': week_data,
+            'archived_at': None,
+            'archived_reason': '',
         }
     )
     return success_response({
@@ -109,11 +124,7 @@ def get_timesheet(request):
     week_number = _normalize_int(request.GET.get('week'))
     sheet_id = (request.GET.get('sheetId') or '1').strip() or '1'
 
-    queryset = (
-        Timesheet.objects
-        .filter(customer_key=customer_key, employee_device=device)
-        .order_by('-updated_at', '-id')
-    )
+    queryset = _get_active_timesheet_queryset(customer_key, device).order_by('-updated_at', '-id')
 
     if week_year is not None and week_number is not None:
         queryset = queryset.filter(
@@ -141,10 +152,12 @@ def list_timesheets(request):
     week_number = _normalize_int(request.GET.get('week'))
     limit = _normalize_int(request.GET.get('limit'))
 
-    queryset = (
-        Timesheet.objects
-        .filter(customer_key=customer_key, employee_device=device)
-        .order_by('-week_year', '-week_number', 'sheet_id', '-updated_at', '-id')
+    queryset = _get_active_timesheet_queryset(customer_key, device).order_by(
+        '-week_year',
+        '-week_number',
+        'sheet_id',
+        '-updated_at',
+        '-id',
     )
 
     if week_year is not None:
@@ -155,3 +168,60 @@ def list_timesheets(request):
         queryset = queryset[:limit]
 
     return success_response([_serialize_timesheet(ts) for ts in queryset])
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def archive_timesheet(request):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return error_response('Invalid JSON', 400)
+
+    if not validate_employee_csrf(request):
+        return unauthorized_response('Invalid CSRF token')
+
+    customer_key = get_employee_request_customer_key(request)
+    device = get_employee_device_from_request(request, customer_key)
+    if not device:
+        return unauthorized_response('Employee device not initialized')
+
+    week_year = _normalize_int(body.get('year'))
+    week_number = _normalize_int(body.get('week'))
+    sheet_id = str(body.get('sheetId') or '1').strip() or '1'
+
+    if week_year is None or week_number is None:
+        return error_response('year and week required', 400)
+
+    touch_employee_device(device)
+
+    timesheet = (
+        _get_active_timesheet_queryset(customer_key, device)
+        .filter(
+            week_year=week_year,
+            week_number=week_number,
+            sheet_id=sheet_id[:50],
+        )
+        .first()
+    )
+
+    if not timesheet:
+        return success_response({
+            'archived': False,
+            'already_missing': True,
+            'week_year': week_year,
+            'week_number': week_number,
+            'sheet_id': sheet_id[:50],
+        })
+
+    timesheet.archived_at = timezone.now()
+    timesheet.archived_reason = 'employee_deleted'
+    timesheet.save(update_fields=['archived_at', 'archived_reason', 'updated_at'])
+
+    return success_response({
+        'archived': True,
+        'week_year': week_year,
+        'week_number': week_number,
+        'sheet_id': sheet_id[:50],
+        'archived_at': timesheet.archived_at.isoformat() if timesheet.archived_at else None,
+    })

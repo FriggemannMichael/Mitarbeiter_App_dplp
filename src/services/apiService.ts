@@ -61,6 +61,7 @@ export interface TimesheetApiPayload<TWeekData = unknown> {
   week_year?: number | null;
   week_number?: number | null;
   sheet_id?: string | null;
+  updated_at?: string | null;
   weekData: TWeekData;
 }
 
@@ -321,6 +322,23 @@ class ApiService {
     if (params?.limit != null) search.set("limit", String(params.limit));
     const suffix = search.toString();
     return this.get(`/api/list-timesheets${suffix ? `?${suffix}` : ""}`);
+  }
+
+  async archiveTimesheet(payload: {
+    year: number;
+    week: number;
+    sheetId?: number | string;
+  }): Promise<
+    ApiResponse<{
+      archived: boolean;
+      already_missing?: boolean;
+      week_year: number;
+      week_number: number;
+      sheet_id: string;
+      archived_at?: string | null;
+    }>
+  > {
+    return this.post("/api/archive-timesheet", payload);
   }
 
   // ==========================================

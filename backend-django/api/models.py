@@ -97,6 +97,8 @@ class Timesheet(models.Model):
     week_number = models.IntegerField(null=True, blank=True)
     sheet_id = models.CharField(max_length=50, default='default')
     week_data = models.JSONField()
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_reason = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

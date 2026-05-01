@@ -530,6 +530,16 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteWeek = useCallback(
     async (year: number, week: number, sheetId: number = 1) => {
       try {
+        const archiveResponse = await apiService.archiveTimesheet({
+          year,
+          week,
+          sheetId,
+        });
+
+        if (!archiveResponse.success) {
+          throw new Error(archiveResponse.error || "Archivierung fehlgeschlagen");
+        }
+
         storage.removeWeekData(year, week, sheetId);
 
         if (
@@ -545,11 +555,21 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           data: { year, week, sheetId },
         });
 
-        const sheets = storage.getAllSheetsForWeek(year, week);
-        setAllSheets(sheets as WeekData[]);
+        const listResponse = await apiService.listTimesheets<WeekData>({
+          year,
+          week,
+        });
+        const remainingSheets =
+          listResponse.success && Array.isArray(listResponse.data)
+            ? listResponse.data
+                .map((item) => item.weekData)
+                .filter((weekData): weekData is WeekData => Boolean(weekData))
+                .sort((a, b) => (a.sheetId ?? 1) - (b.sheetId ?? 1))
+            : storage.getAllSheetsForWeek(year, week);
+        setAllSheets(remainingSheets as WeekData[]);
       } catch (err: any) {
-        console.error("Fehler beim Löschen:", err);
-        setError(err.message || "Fehler beim Löschen");
+        console.error("Fehler beim Archivieren:", err);
+        setError(err.message || "Fehler beim Archivieren");
       }
     },
     [currentWeek],

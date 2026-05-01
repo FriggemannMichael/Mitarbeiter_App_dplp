@@ -29,6 +29,20 @@ import { isFeatureEnabled } from "../utils/featureFlags";
 import { apiService } from "../services/apiService";
 import type { WeekData } from "../types/weekdata.types";
 
+type DashboardSheetSummary = {
+  sheetId: number;
+  customer: string;
+  hours: number;
+  locked: boolean;
+};
+
+type DashboardWeekSummary = {
+  week: number;
+  year: number;
+  sheets: DashboardSheetSummary[];
+  totalHours: number;
+};
+
 interface DashboardProps {
   employeeName: string;
   onLogout?: () => void;
@@ -65,12 +79,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [selectedWeek, setSelectedWeek] = useState<{
     week: number;
     year: number;
-    sheets: Array<{
-      sheetId: number;
-      customer: string;
-      hours: number;
-      locked: boolean;
-    }>;
+    sheets: DashboardSheetSummary[];
     totalHours: number;
   } | null>(null);
 
@@ -154,21 +163,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
   }, []);
 
+  const sourceWeeks = useMemo(() => {
+    if (backendWeeks !== null) {
+      return backendWeeks;
+    }
+
+    return storage
+      .getAllStoredWeeks()
+      .filter((week) => week.employeeName === employeeName);
+  }, [backendWeeks, employeeName]);
+
   // Wochendaten laden (mit allen Zetteln pro Woche)
   const weekData = useMemo(() => {
-    void backendWeeks;
 
-    const weeks: Array<{
-      week: number;
-      year: number;
-      sheets: Array<{
-        sheetId: number;
-        customer: string;
-        hours: number;
-        locked: boolean;
-      }>;
-      totalHours: number;
-    }> = [];
+    const weeks: DashboardWeekSummary[] = [];
 
     const currentMonday = weekUtils.getMonday(currentYear, currentWeek);
 
@@ -214,52 +222,81 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return weeks.filter((w) => w.sheets.length > 0);
   }, [currentWeek, currentYear, t]);
 
+  const backendWeekData = useMemo(() => {
+    const groupedWeeks = new Map<string, DashboardWeekSummary>();
+
+    sourceWeeks.forEach((sheet) => {
+      const key = `${sheet.year}-${sheet.week}`;
+      const sheetHours = sheet.days.reduce((sum, day) => {
+        const [hours, minutes] = day.hours.split(":").map(Number);
+        return sum + hours + minutes / 60;
+      }, 0);
+
+      const existingWeek = groupedWeeks.get(key) ?? {
+        week: sheet.week,
+        year: sheet.year,
+        sheets: [],
+        totalHours: 0,
+      };
+
+      existingWeek.sheets.push({
+        sheetId: sheet.sheetId ?? 1,
+        customer: sheet.customer || t("dashboard.noCustomer") || "Kein Kunde",
+        hours: sheetHours,
+        locked: sheet.locked || false,
+      });
+      existingWeek.totalHours += sheetHours;
+
+      groupedWeeks.set(key, existingWeek);
+    });
+
+    return Array.from(groupedWeeks.values())
+      .map((week) => ({
+        ...week,
+        sheets: week.sheets.sort((a, b) => a.sheetId - b.sheetId),
+      }))
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.week - a.week;
+      })
+      .slice(0, 4);
+  }, [sourceWeeks, t]);
+
+  const effectiveWeekData =
+    backendWeeks !== null ? backendWeekData : weekData;
+
   // Statistiken berechnen
   const stats = useMemo(() => {
-    const thisWeek = weekData[0]; // Erste Woche ist jetzt die aktuelle
+    const thisWeek =
+      effectiveWeekData.find(
+        (week) => week.week === currentWeek && week.year === currentYear,
+      ) || effectiveWeekData[0];
 
     // Monatsstunden berechnen (aktueller Monat)
     const currentMonth = new Date().getMonth();
-    const monthHours = weekData.reduce((sum, w) => {
-      // Prüfe ob Woche im aktuellen Monat liegt
-      const weekDate = new Date(w.year, 0, 1 + (w.week - 1) * 7);
-      if (weekDate.getMonth() === currentMonth) {
-        return sum + w.totalHours;
-      }
-      return sum;
-    }, 0);
+    let monthHours = 0;
 
     // Kranktage und Urlaubstage zählen (aktueller Monat)
     let sickDays = 0;
     let vacationDays = 0;
 
-    // Alle Zettel durchgehen
-    const currentMonday = weekUtils.getMonday(currentYear, currentWeek);
-    for (let i = 0; i < 8; i++) {
-      const monday = new Date(currentMonday);
-      monday.setDate(currentMonday.getDate() - i * 7);
-      const thursday = new Date(monday);
-      thursday.setDate(monday.getDate() + 3);
-      const year = thursday.getFullYear();
-      const week = weekUtils.getWeekNumber(monday);
-
-      const sheets = storage.getAllSheetsForWeek(year, week);
-      sheets.forEach((sheet) => {
-        sheet.days.forEach((day) => {
-          const dayDate = new Date(day.date);
-          if (
-            dayDate.getMonth() === currentMonth &&
-            dayDate.getFullYear() === currentYear
-          ) {
-            if (day.absence === "sick") sickDays++;
-            if (day.absence === "vacation") vacationDays++;
-          }
-        });
+    sourceWeeks.forEach((sheet) => {
+      sheet.days.forEach((day) => {
+        const dayDate = new Date(day.date);
+        if (
+          dayDate.getMonth() === currentMonth &&
+          dayDate.getFullYear() === currentYear
+        ) {
+          const [hours, minutes] = day.hours.split(":").map(Number);
+          monthHours += hours + minutes / 60;
+          if (day.absence === "sick") sickDays++;
+          if (day.absence === "vacation") vacationDays++;
+        }
       });
-    }
+    });
 
     // Offene Wochen (ohne Unterschrift) – aktuelle Woche ausschließen, die ist noch in Bearbeitung
-    const openWeeks = weekData.filter((w) =>
+    const openWeeks = effectiveWeekData.filter((w) =>
       !(w.week === currentWeek && w.year === currentYear) &&
       w.sheets.some((s) => !s.locked)
     ).length;
@@ -271,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       vacationDays,
       openWeeks,
     };
-  }, [weekData, currentWeek, currentYear]);
+  }, [effectiveWeekData, sourceWeeks, currentWeek, currentYear]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -506,7 +543,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Offene Wochen – Handlungsaufforderung */}
           {(() => {
-            const currentWeekRunning = weekData.some(
+            const currentWeekRunning = effectiveWeekData.some(
               (w) => w.week === currentWeek && w.year === currentYear && w.sheets.some((s) => !s.locked)
             );
 
@@ -516,7 +553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <motion.button
                   variants={item}
                   onClick={() => {
-                    const firstOpen = weekData.find(
+                    const firstOpen = effectiveWeekData.find(
                       (w) => !(w.week === currentWeek && w.year === currentYear) && w.sheets.some((s) => !s.locked)
                     );
                     if (firstOpen) setSelectedWeek(firstOpen);
@@ -776,12 +813,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {t("dashboard.weekOverview") || "Wochenübersicht"}
           </h3>
           <div className="space-y-2">
-            {weekData.length === 0 && (
+            {effectiveWeekData.length === 0 && (
               <div className="text-center py-8 text-slate-400 text-sm">
                 {t("dashboard.noWeeks") || "Noch keine Stunden erfasst"}
               </div>
             )}
-            {weekData.map((week, index) => {
+            {effectiveWeekData.map((week, index) => {
               const targetHours = config.work.max_work_hours_per_day * 5;
               const percentage = Math.min(
                 (week.totalHours / targetHours) * 100,
