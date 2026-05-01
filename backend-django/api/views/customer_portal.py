@@ -85,6 +85,12 @@ def _employee_name_key(value: str) -> str:
     return " ".join((value or "").strip().lower().split())
 
 
+def _employee_identity_key(device_id, name: str) -> str:
+    if device_id:
+        return f"device:{device_id}"
+    return f"name:{_employee_name_key(name)}"
+
+
 def _extract_review_meta(week_data: dict) -> dict:
     review = week_data.get("portalReview") or {}
     if not isinstance(review, dict):
@@ -211,39 +217,47 @@ def _get_timesheet_queryset(customer_key: str):
     )
 
 
-def _get_known_employee_names(customer_key: str, timesheets: list[Timesheet]) -> list[str]:
-    names_by_key: dict[str, str] = {}
-    for device_name in EmployeeDevice.objects.filter(
+def _get_known_employees(customer_key: str, timesheets: list[Timesheet]) -> list[dict]:
+    employees_by_key: dict[str, dict] = {}
+    for device in EmployeeDevice.objects.filter(
         customer_key=customer_key,
         is_active=True,
-    ).exclude(display_name="").values_list("display_name", flat=True):
-        value = (device_name or "").strip()
+    ).exclude(display_name=""):
+        value = (device.display_name or "").strip()
         if value:
-            key = _employee_name_key(value)
-            if key and key not in names_by_key:
-                names_by_key[key] = value
+            key = _employee_identity_key(device.id, value)
+            if key and key not in employees_by_key:
+                employees_by_key[key] = {
+                    "key": key,
+                    "name": value,
+                    "device_id": device.id,
+                }
 
     for timesheet in timesheets:
         value = _extract_employee_name(timesheet).strip()
         if value:
-            key = _employee_name_key(value)
-            if key and key not in names_by_key:
-                names_by_key[key] = value
+            key = _employee_identity_key(timesheet.employee_device_id, value)
+            if key and key not in employees_by_key:
+                employees_by_key[key] = {
+                    "key": key,
+                    "name": value,
+                    "device_id": timesheet.employee_device_id,
+                }
 
-    return sorted(names_by_key.values(), key=lambda value: value.lower())
+    return sorted(employees_by_key.values(), key=lambda value: value["name"].lower())
 
 
-def _build_missing_employees(employee_names: list[str], timesheets: list[Timesheet]) -> list[str]:
+def _build_missing_employees(known_employees: list[dict], timesheets: list[Timesheet]) -> list[str]:
     current_year, current_week = _current_week_identity()
-    present_names = {
-        _employee_name_key(_extract_employee_name(timesheet))
+    present_employee_keys = {
+        _employee_identity_key(timesheet.employee_device_id, _extract_employee_name(timesheet))
         for timesheet in timesheets
         if timesheet.week_year == current_year and timesheet.week_number == current_week
     }
     return [
-        name
-        for name in employee_names
-        if _employee_name_key(name) not in present_names
+        employee["name"]
+        for employee in known_employees
+        if employee["key"] not in present_employee_keys
     ]
 
 
@@ -270,8 +284,8 @@ def portal_summary(request):
     submitted_count = sum(
         1 for timesheet in queryset if _derive_review_status(timesheet.week_data or {}) == REVIEW_STATUS_SUBMITTED
     )
-    known_employee_names = _get_known_employee_names(customer_key, queryset)
-    missing_employees = _build_missing_employees(known_employee_names, queryset)
+    known_employees = _get_known_employees(customer_key, queryset)
+    missing_employees = _build_missing_employees(known_employees, queryset)
 
     return success_response({
         "current_week": {"year": current_year, "week": current_week},
@@ -293,8 +307,9 @@ def portal_employees(request):
     current_year, current_week = _current_week_identity()
 
     by_employee: dict[str, dict] = {}
-    for employee_name in _get_known_employee_names(customer_key, queryset):
-        employee_key = _employee_name_key(employee_name)
+    for employee in _get_known_employees(customer_key, queryset):
+        employee_name = employee["name"]
+        employee_key = employee["key"]
         by_employee[employee_key] = {
             "employee_name": employee_name,
             "timesheet_count": 0,
