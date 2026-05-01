@@ -421,11 +421,11 @@
   "absence.absent": "Absent",
   "day.orderNumberOptional": "Num?ro de commande (optionnel)",
   "day.commissionOptional": "Commission (optionnel)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "1 feuille de temps non signée !",
+  "dashboard.pendingSheets.many": "{{count}} feuilles de temps non signées !",
+  "dashboard.pendingSheets.cta": "Appuyer pour signer ->",
+  "dashboard.currentWeekRunning.title": "Semaine actuelle en cours",
+  "dashboard.currentWeekRunning.desc": "Pas d'anciens relevés ouverts - tout est en ordre.",
+  "dashboard.allSigned.title": "Toutes les feuilles de temps signées !",
+  "dashboard.allSigned.desc": "Rien à faire - tout est terminé."
 }

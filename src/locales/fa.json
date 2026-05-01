@@ -421,11 +421,11 @@
   "absence.absent": "????",
   "day.orderNumberOptional": "????? ????? (???????)",
   "day.commissionOptional": "??????? (???????)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "1 برگه کارکرد هنوز امضا نشده!",
+  "dashboard.pendingSheets.many": "{{count}} برگه کارکرد هنوز امضا نشده!",
+  "dashboard.pendingSheets.cta": "همین الان بزنید و امضا کنید",
+  "dashboard.currentWeekRunning.title": "هفته جاری هنوز در جریان است",
+  "dashboard.currentWeekRunning.desc": "هیچ برگه قدیمی باز نیست - همه چیز درست است.",
+  "dashboard.allSigned.title": "همه برگه‌های کارکرد امضا شده‌اند!",
+  "dashboard.allSigned.desc": "کاری برای انجام نیست - همه چیز تمام شده."
 }

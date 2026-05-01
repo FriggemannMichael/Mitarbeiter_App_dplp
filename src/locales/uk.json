@@ -421,11 +421,11 @@
   "absence.absent": "?????????",
   "day.orderNumberOptional": "????? ?????????? (?????????????)",
   "day.commissionOptional": "??????? (?????????????)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "1 табель не підписано!",
+  "dashboard.pendingSheets.many": "{{count}} табелів не підписано!",
+  "dashboard.pendingSheets.cta": "Натисніть і підпишіть ->",
+  "dashboard.currentWeekRunning.title": "Поточний тиждень ще триває",
+  "dashboard.currentWeekRunning.desc": "Немає старих відкритих табелів - все гаразд.",
+  "dashboard.allSigned.title": "Всі табелі підписано!",
+  "dashboard.allSigned.desc": "Нічого робити - все готово."
 }

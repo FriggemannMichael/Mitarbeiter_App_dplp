@@ -421,11 +421,11 @@
   "absence.absent": "????",
   "day.orderNumberOptional": "??? ????? (???????)",
   "day.commissionOptional": "??????? (???????)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "ورقة دوام واحدة لم يتم التوقيع عليها!",
+  "dashboard.pendingSheets.many": "{{count}} أوراق دوام لم يتم التوقيع عليها!",
+  "dashboard.pendingSheets.cta": "اضغط الآن للتوقيع",
+  "dashboard.currentWeekRunning.title": "الأسبوع الحالي لا يزال جارياً",
+  "dashboard.currentWeekRunning.desc": "لا توجد أوراق قديمة مفتوحة - كل شيء على ما يرام.",
+  "dashboard.allSigned.title": "تم توقيع جميع أوراق الدوام!",
+  "dashboard.allSigned.desc": "لا يوجد شيء للقيام به - كل شيء منجز."
 }

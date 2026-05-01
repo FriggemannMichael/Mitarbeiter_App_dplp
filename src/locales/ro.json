@@ -421,11 +421,11 @@
   "absence.absent": "Absent",
   "day.orderNumberOptional": "Num?r comand? (op?ional)",
   "day.commissionOptional": "Comision (op?ional)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "1 pontaj nesemnat!",
+  "dashboard.pendingSheets.many": "{{count}} pontaje nesemnate!",
+  "dashboard.pendingSheets.cta": "Atinge acum și semnează ->",
+  "dashboard.currentWeekRunning.title": "Săptămâna curentă în desfășurare",
+  "dashboard.currentWeekRunning.desc": "Fără pontaje vechi deschise - totul este în regulă.",
+  "dashboard.allSigned.title": "Toate pontajele semnate!",
+  "dashboard.allSigned.desc": "Nimic de făcut - totul este gata."
 }

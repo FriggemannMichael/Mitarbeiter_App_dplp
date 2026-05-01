@@ -421,11 +421,11 @@
   "absence.absent": "Nieobecny",
   "day.orderNumberOptional": "Numer zlecenia (opcjonalnie)",
   "day.commissionOptional": "Prowizja (opcjonalnie)",
-  "dashboard.pendingSheets.one": "1 timesheet is still unsigned!",
-  "dashboard.pendingSheets.many": "{{count}} timesheets are still unsigned!",
-  "dashboard.pendingSheets.cta": "Tap now and sign off ->",
-  "dashboard.currentWeekRunning.title": "Current week still in progress",
-  "dashboard.currentWeekRunning.desc": "No old open sheets - everything is on track.",
-  "dashboard.allSigned.title": "All timesheets signed!",
-  "dashboard.allSigned.desc": "Nothing to do - everything is done."
+  "dashboard.pendingSheets.one": "1 karta czasu pracy nie jest podpisana!",
+  "dashboard.pendingSheets.many": "{{count}} karty czasu pracy nie są podpisane!",
+  "dashboard.pendingSheets.cta": "Dotknij i podpisz ->",
+  "dashboard.currentWeekRunning.title": "Bieżący tydzień w toku",
+  "dashboard.currentWeekRunning.desc": "Brak starych otwartych kart - wszystko w porządku.",
+  "dashboard.allSigned.title": "Wszystkie karty podpisane!",
+  "dashboard.allSigned.desc": "Nic do zrobienia - wszystko gotowe."
 }
