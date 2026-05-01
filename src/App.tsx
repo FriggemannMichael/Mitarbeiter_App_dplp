@@ -27,7 +27,6 @@ function AppContent() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const initializedEmployeeDeviceRef = useRef<string>("");
   const migratedEmployeeWeeksRef = useRef<string>("");
-  const failedEmployeeDeviceInitRef = useRef<string>("");
   const isAdminRoute =
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
@@ -82,14 +81,11 @@ function AppContent() {
       return;
     }
 
-    if (failedEmployeeDeviceInitRef.current === employeeName) {
-      return;
-    }
-
     let isCancelled = false;
 
     const initializeEmployeeDevice = async () => {
       try {
+        apiService.resetEmployeeTimesheetSyncSupport();
         const response = await apiService.initEmployeeDevice(employeeName);
         if (!response.success) {
           throw new Error(response.error || "Employee device init failed");
@@ -146,9 +142,6 @@ function AppContent() {
           }
         }
       } catch (error) {
-        if (!isCancelled) {
-          failedEmployeeDeviceInitRef.current = employeeName;
-        }
         logger.warn("Employee device initialization failed", {
           component: "App",
           data: {

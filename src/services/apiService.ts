@@ -100,6 +100,10 @@ class ApiService {
     return this.employeeTimesheetSyncSupported !== false;
   }
 
+  resetEmployeeTimesheetSyncSupport(): void {
+    this.employeeTimesheetSyncSupported = null;
+  }
+
   setCustomerKey(customerKey: string): void {
     this.customerKey = (customerKey || "").trim();
   }
@@ -129,7 +133,6 @@ class ApiService {
     if (
       message.includes("Invalid JSON response from API") ||
       message.includes("Netzwerkfehler") ||
-      message.includes("Invalid CSRF token") ||
       message.includes("HTTP 404") ||
       message.includes("404")
     ) {
