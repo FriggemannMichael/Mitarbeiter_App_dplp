@@ -167,6 +167,7 @@ def _serialize_timesheet_portal(timesheet: Timesheet) -> dict:
         "week_number": timesheet.week_number,
         "sheet_id": timesheet.sheet_id,
         "customer": (week_data.get("customer") or "").strip(),
+        "week_data": week_data,
         "status": _derive_review_status(week_data),
         "workflow_status": week_data.get("status") or "OPEN",
         "hours_total": _sum_week_hours(days),

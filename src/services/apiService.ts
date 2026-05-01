@@ -10,6 +10,7 @@ import type {
   WorkSettings,
   EmailConfig,
 } from "../types/config.types";
+import type { WeekData } from "../types/weekdata.types";
 
 const DEFAULT_API_BASE_URL =
   typeof window !== "undefined"
@@ -80,6 +81,7 @@ export interface PortalTimesheetDto {
   week_number: number;
   sheet_id: string;
   customer: string;
+  week_data: WeekData;
   status: string;
   workflow_status: string;
   hours_total: number;

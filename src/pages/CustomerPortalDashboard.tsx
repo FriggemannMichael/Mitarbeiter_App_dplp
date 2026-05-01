@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  Eye,
   LogOut,
   MessageSquare,
   ShieldCheck,
@@ -12,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { useConfig } from "../contexts/ConfigContext";
 import {
   apiService,
   type PortalAbsenceDto,
@@ -21,6 +23,7 @@ import {
   type PortalTimesheetDto,
 } from "../services/apiService";
 import { portalAuthService } from "../services/portalAuthService";
+import { PdfExporter } from "../utils/pdfExporter";
 
 type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit";
 
@@ -45,6 +48,7 @@ function formatStatus(status?: string): string {
 }
 
 export const CustomerPortalDashboard: React.FC = () => {
+  const { config } = useConfig();
   const currentUser = portalAuthService.getCurrentUser();
   const [activeTab, setActiveTab] = useState<PortalTab>("dashboard");
   const [summary, setSummary] = useState<PortalSummaryDto | null>(null);
@@ -55,6 +59,9 @@ export const CustomerPortalDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [timesheetStatusFilter, setTimesheetStatusFilter] = useState("");
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [selectedTimesheet, setSelectedTimesheet] = useState<PortalTimesheetDto | null>(null);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const canApprove = portalAuthService.canApproveTimesheets();
 
   const loadPortalData = async () => {
@@ -113,6 +120,14 @@ export const CustomerPortalDashboard: React.FC = () => {
     void loadPortalData();
   }, [timesheetStatusFilter]);
 
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) {
+        URL.revokeObjectURL(pdfPreviewUrl);
+      }
+    };
+  }, [pdfPreviewUrl]);
+
   const employeeCountWithoutCurrentWeekSheet = useMemo(
     () => employees.filter((employee) => !employee.has_current_week_timesheet).length,
     [employees],
@@ -126,6 +141,15 @@ export const CustomerPortalDashboard: React.FC = () => {
   const handleLogout = async () => {
     await portalAuthService.logout();
     window.location.reload();
+  };
+
+  const closePdfPreview = () => {
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+    }
+    setPdfPreviewUrl("");
+    setSelectedTimesheet(null);
+    setIsPreparingPdf(false);
   };
 
   const handleReviewAction = async (
@@ -184,6 +208,30 @@ export const CustomerPortalDashboard: React.FC = () => {
           ? actionError.message
           : "Kommentar konnte nicht gespeichert werden",
       );
+    }
+  };
+
+  const handleOpenPdfPreview = async (timesheet: PortalTimesheetDto) => {
+    try {
+      setIsPreparingPdf(true);
+      if (pdfPreviewUrl) {
+        URL.revokeObjectURL(pdfPreviewUrl);
+      }
+      const pdfBytes = await PdfExporter.generatePDF(timesheet.week_data, config);
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+      const nextUrl = URL.createObjectURL(blob);
+      setSelectedTimesheet(timesheet);
+      setPdfPreviewUrl(nextUrl);
+    } catch (previewError) {
+      window.alert(
+        previewError instanceof Error
+          ? previewError.message
+          : "PDF konnte nicht erstellt werden",
+      );
+      setSelectedTimesheet(null);
+      setPdfPreviewUrl("");
+    } finally {
+      setIsPreparingPdf(false);
     }
   };
 
@@ -385,11 +433,19 @@ export const CustomerPortalDashboard: React.FC = () => {
                           >
                             {formatStatus(timesheet.status)}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenPdfPreview(timesheet)}
+                            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            PDF
+                          </button>
                           {canApprove && (
                             <>
                               <button
                                 type="button"
-                                onClick={() => handleAddComment(timesheet.id)}
+                                onClick={() => void handleAddComment(timesheet.id)}
                                 className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -397,14 +453,14 @@ export const CustomerPortalDashboard: React.FC = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "reviewed")}
+                                onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
                                 Pruefen
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "approved")}
+                                onClick={() => void handleReviewAction(timesheet.id, "approved")}
                                 className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 inline-flex items-center gap-1"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -412,7 +468,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "rejected")}
+                                onClick={() => void handleReviewAction(timesheet.id, "rejected")}
                                 className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
@@ -534,6 +590,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <th className="py-2 pr-4">Stunden</th>
                       <th className="py-2 pr-4">Status und Verlauf</th>
                       <th className="py-2 pr-4">Unterschrift</th>
+                      <th className="py-2 pr-4">PDF</th>
                       {canApprove && <th className="py-2 pr-4">Aktion</th>}
                     </tr>
                   </thead>
@@ -591,12 +648,22 @@ export const CustomerPortalDashboard: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3 pr-4">{timesheet.has_signature ? "Ja" : "Nein"}</td>
+                        <td className="py-3 pr-4">
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenPdfPreview(timesheet)}
+                            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            PDF ansehen
+                          </button>
+                        </td>
                         {canApprove && (
                           <td className="py-3 pr-4">
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={() => handleAddComment(timesheet.id)}
+                                onClick={() => void handleAddComment(timesheet.id)}
                                 className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -604,21 +671,21 @@ export const CustomerPortalDashboard: React.FC = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "reviewed")}
+                                onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
                                 Pruefen
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "approved")}
+                                onClick={() => void handleReviewAction(timesheet.id, "approved")}
                                 className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                               >
                                 Freigeben
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleReviewAction(timesheet.id, "rejected")}
+                                onClick={() => void handleReviewAction(timesheet.id, "rejected")}
                                 className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
                               >
                                 Ablehnen
@@ -718,6 +785,80 @@ export const CustomerPortalDashboard: React.FC = () => {
           </>
         )}
       </div>
+
+      {(isPreparingPdf || pdfPreviewUrl) && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl h-[92vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-lg font-bold text-slate-900">
+                  PDF-Vorschau Stundenzettel
+                </div>
+                <div className="text-sm text-slate-600">
+                  {selectedTimesheet
+                    ? `${selectedTimesheet.employee_name} · KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
+                    : "PDF wird vorbereitet..."}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedTimesheet && canApprove && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleAddComment(selectedTimesheet.id)}
+                      className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Kommentar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
+                      className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      Pruefen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleReviewAction(selectedTimesheet.id, "approved")}
+                      className="rounded-2xl border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Freigeben
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleReviewAction(selectedTimesheet.id, "rejected")}
+                      className="rounded-2xl border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50"
+                    >
+                      Ablehnen
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={closePdfPreview}
+                  className="rounded-2xl bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-black"
+                >
+                  Schliessen
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-slate-100">
+              {isPreparingPdf || !pdfPreviewUrl ? (
+                <div className="h-full flex items-center justify-center text-slate-500">
+                  PDF wird erstellt...
+                </div>
+              ) : (
+                <iframe
+                  title="PDF-Vorschau Stundenzettel"
+                  src={pdfPreviewUrl}
+                  className="w-full h-full"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
