@@ -49,6 +49,22 @@ export interface AccountDto {
   updated_at?: string | null;
 }
 
+interface EmployeeDeviceResponse {
+  id: number;
+  display_name: string;
+  is_active: boolean;
+  last_seen_at?: string | null;
+}
+
+export interface TimesheetApiPayload<TWeekData = unknown> {
+  id: number;
+  week_year?: number | null;
+  week_number?: number | null;
+  sheet_id?: string | null;
+  updated_at?: string | null;
+  weekData: TWeekData;
+}
+
 class ApiService {
   private baseUrl: string;
   private customerKey: string;
@@ -87,6 +103,27 @@ class ApiService {
     this.authToken = (token || "").trim();
   }
 
+  private getCookieValue(name: string): string {
+    if (typeof document === "undefined") {
+      return "";
+    }
+
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${escapedName}=([^;]*)`),
+    );
+
+    if (!match) {
+      return "";
+    }
+
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+
   /**
    * Generische API-Anfrage mit Error-Handling
    */
@@ -107,6 +144,10 @@ class ApiService {
     }
     if (this.authToken) {
       (defaultHeaders as Record<string, string>)["Authorization"] = `Bearer ${this.authToken}`;
+    }
+    const employeeCsrfToken = this.getCookieValue("employee_csrf");
+    if (employeeCsrfToken) {
+      (defaultHeaders as Record<string, string>)["X-Employee-CSRF"] = employeeCsrfToken;
     }
 
     const config: RequestInit = {
@@ -227,6 +268,77 @@ class ApiService {
     },
   ): Promise<ApiResponse<AccountDto>> {
     return this.put<AccountDto>(`/api/accounts/${accountId}`, payload);
+  }
+
+  async initEmployeeDevice(displayName?: string): Promise<
+    ApiResponse<{
+      device: EmployeeDeviceResponse;
+      created: boolean;
+    }>
+  > {
+    return this.post("/api/employee-device/init", {
+      displayName: (displayName || "").trim(),
+    });
+  }
+
+  async saveTimesheet<TWeekData>(payload: {
+    weekData: TWeekData;
+    year: number;
+    week: number;
+    sheetId?: number | string;
+    displayName?: string;
+  }): Promise<
+    ApiResponse<{
+      id: number;
+      week_year: number;
+      week_number: number;
+      sheet_id: string;
+    }>
+  > {
+    return this.post("/api/save-timesheet", payload);
+  }
+
+  async getTimesheet<TWeekData>(
+    year: number,
+    week: number,
+    sheetId: number | string = 1,
+  ): Promise<ApiResponse<TimesheetApiPayload<TWeekData> | null>> {
+    const search = new URLSearchParams({
+      year: String(year),
+      week: String(week),
+      sheetId: String(sheetId),
+    });
+    return this.get(`/api/get-timesheet?${search.toString()}`);
+  }
+
+  async listTimesheets<TWeekData>(params?: {
+    year?: number;
+    week?: number;
+    limit?: number;
+  }): Promise<ApiResponse<Array<TimesheetApiPayload<TWeekData>>>> {
+    const search = new URLSearchParams();
+    if (params?.year != null) search.set("year", String(params.year));
+    if (params?.week != null) search.set("week", String(params.week));
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    const suffix = search.toString();
+    return this.get(`/api/list-timesheets${suffix ? `?${suffix}` : ""}`);
+  }
+
+  async archiveTimesheet(payload: {
+    year: number;
+    week: number;
+    sheetId?: number | string;
+  }): Promise<
+    ApiResponse<{
+      archived: boolean;
+      already_missing?: boolean;
+      week_year: number;
+      week_number: number;
+      sheet_id: string;
+      archived_at?: string | null;
+    }>
+  > {
+    return this.post("/api/archive-timesheet", payload);
   }
 
   // ==========================================

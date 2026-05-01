@@ -98,6 +98,7 @@ const LAST_BACKUP_DATE_KEY = "wpdl_last_backup_date";
 const BACKUP_REMINDER_DISMISSED_KEY = "wpdl_backup_reminder_dismissed";
 const FIRST_USE_DATE_KEY = "wpdl_first_use_date";
 const THEME_KEY = "wpdl_theme";
+const BACKEND_TIMESHEET_MIGRATION_PREFIX = "wpdl_backend_timesheet_migration_v1_";
 
 // Helper Funktionen für localStorage
 export const storage = {
@@ -214,6 +215,15 @@ export const storage = {
     return data ? JSON.parse(data) : null;
   },
 
+  removeWeekData: (
+    year: number,
+    week: number,
+    sheetId: number = 1
+  ): void => {
+    const key = `${STORAGE_PREFIX}week_${year}_${week}_sheet_${sheetId}`;
+    localStorage.removeItem(key);
+  },
+
   // Alle Zettel einer Woche laden
   getAllSheetsForWeek: (year: number, week: number): WeekData[] => {
     const sheets: WeekData[] = [];
@@ -265,6 +275,54 @@ export const storage = {
       }
     }
     return keys;
+  },
+
+  getAllStoredWeeks: (): WeekData[] => {
+    const weeks: WeekData[] = [];
+
+    storage.getAllWeekKeys().forEach((key) => {
+      const data = localStorage.getItem(key);
+      if (!data) return;
+
+      try {
+        const parsed = JSON.parse(data) as WeekData;
+        if (
+          parsed &&
+          typeof parsed.year === "number" &&
+          typeof parsed.week === "number" &&
+          typeof parsed.sheetId === "number"
+        ) {
+          weeks.push(parsed);
+        }
+      } catch (error) {
+        console.warn(`Failed to parse stored week for key ${key}:`, error);
+      }
+    });
+
+    return weeks.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      if (a.week !== b.week) return a.week - b.week;
+      return a.sheetId - b.sheetId;
+    });
+  },
+
+  hasCompletedBackendTimesheetMigration: (employeeName: string): boolean => {
+    const normalizedName = employeeName.trim().toLowerCase();
+    if (!normalizedName) return false;
+    return (
+      localStorage.getItem(
+        `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${normalizedName}`,
+      ) === "true"
+    );
+  },
+
+  markBackendTimesheetMigrationComplete: (employeeName: string): void => {
+    const normalizedName = employeeName.trim().toLowerCase();
+    if (!normalizedName) return;
+    localStorage.setItem(
+      `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${normalizedName}`,
+      "true",
+    );
   },
 
   getRecentDayFieldValues: (

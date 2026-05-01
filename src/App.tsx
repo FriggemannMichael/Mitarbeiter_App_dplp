@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { storage } from "./utils/storage";
 import { Welcome } from "./pages/Welcome";
@@ -14,6 +14,8 @@ import {
   useNotification,
 } from "./contexts/NotificationContext";
 import { ToastContainer } from "./components/Toast";
+import { apiService } from "./services/apiService";
+import { logger } from "./services/logger";
 import "./i18n"; // i18n initialisieren
 
 // Innere App-Komponente (benötigt NotificationProvider)
@@ -23,6 +25,8 @@ function AppContent() {
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const initializedEmployeeDeviceRef = useRef<string>("");
+  const migratedEmployeeWeeksRef = useRef<string>("");
   const isAdminRoute =
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
@@ -62,6 +66,98 @@ function AppContent() {
 
     checkOnboardingStatus();
   }, []);
+
+  useEffect(() => {
+    if (loading || isAdminRoute || !isOnboarded) {
+      return;
+    }
+
+    const employeeName = storage.getEmployeeName().trim();
+    if (!employeeName) {
+      return;
+    }
+
+    if (initializedEmployeeDeviceRef.current === employeeName) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const initializeEmployeeDevice = async () => {
+      try {
+        const response = await apiService.initEmployeeDevice(employeeName);
+        if (!response.success) {
+          throw new Error(response.error || "Employee device init failed");
+        }
+
+        if (!isCancelled) {
+          initializedEmployeeDeviceRef.current = employeeName;
+          logger.info("Employee device initialized", {
+            component: "App",
+            data: {
+              employeeName,
+              created: response.data?.created ?? false,
+              deviceId: response.data?.device?.id,
+            },
+          });
+
+          if (
+            migratedEmployeeWeeksRef.current !== employeeName &&
+            !storage.hasCompletedBackendTimesheetMigration(employeeName)
+          ) {
+            const storedWeeks = storage.getAllStoredWeeks().filter(
+              (weekData) => weekData.employeeName?.trim() === employeeName,
+            );
+
+            if (storedWeeks.length > 0) {
+              let migratedCount = 0;
+
+              for (const weekData of storedWeeks) {
+                await apiService.saveTimesheet({
+                  weekData,
+                  year: weekData.year,
+                  week: weekData.week,
+                  sheetId: weekData.sheetId ?? 1,
+                  displayName: employeeName,
+                });
+                migratedCount += 1;
+              }
+
+              storage.markBackendTimesheetMigrationComplete(employeeName);
+              migratedEmployeeWeeksRef.current = employeeName;
+              logger.info("Local timesheets migrated to backend", {
+                component: "App",
+                data: {
+                  employeeName,
+                  migratedCount,
+                },
+              });
+            } else {
+              storage.markBackendTimesheetMigrationComplete(employeeName);
+              migratedEmployeeWeeksRef.current = employeeName;
+            }
+          } else {
+            migratedEmployeeWeeksRef.current = employeeName;
+          }
+        }
+      } catch (error) {
+        logger.warn("Employee device initialization failed", {
+          component: "App",
+          data: {
+            employeeName,
+            error:
+              error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    };
+
+    initializeEmployeeDevice();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAdminRoute, isOnboarded, loading]);
 
   // Dark Mode nur im App-Bereich aktivieren (nicht im Welcome/Login-Bereich)
   useEffect(() => {
