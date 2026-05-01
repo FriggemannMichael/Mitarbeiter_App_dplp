@@ -21,6 +21,7 @@ ROLE_EMPLOYEE = 'employee'
 ROLE_DISPATCHER = 'dispatcher'
 ROLE_BRANCH_MANAGER = 'branch_manager'
 ROLE_BACKOFFICE = 'backoffice'
+ROLE_VIEWER = 'viewer'
 ROLE_CUSTOMER_ADMIN = 'customer_admin'
 ROLE_PLATFORM_OWNER = 'platform_owner'
 
@@ -29,6 +30,7 @@ VALID_ROLES = {
     ROLE_DISPATCHER,
     ROLE_BRANCH_MANAGER,
     ROLE_BACKOFFICE,
+    ROLE_VIEWER,
     ROLE_CUSTOMER_ADMIN,
     ROLE_PLATFORM_OWNER,
 }

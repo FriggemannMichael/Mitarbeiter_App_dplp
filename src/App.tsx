@@ -4,6 +4,7 @@ import { storage } from "./utils/storage";
 import { Welcome } from "./pages/Welcome";
 import { MainApp } from "./pages/MainApp";
 import { AdminRoute } from "./pages/AdminRoute";
+import { CustomerPortalRoute } from "./pages/CustomerPortalRoute";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -33,6 +34,10 @@ function AppContent() {
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
     currentPath.endsWith("/admin");
+  const isCustomerPortalRoute =
+    currentPath === "/verwaltung" ||
+    currentPath === "/pro/verwaltung" ||
+    currentPath.endsWith("/verwaltung");
 
   // Performance-Tracking
   usePerformanceMonitoring();
@@ -70,7 +75,13 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (loading || isConfigLoading || isAdminRoute || !isOnboarded) {
+    if (
+      loading ||
+      isConfigLoading ||
+      isAdminRoute ||
+      isCustomerPortalRoute ||
+      !isOnboarded
+    ) {
       return;
     }
 
@@ -160,17 +171,17 @@ function AppContent() {
     return () => {
       isCancelled = true;
     };
-  }, [isAdminRoute, isOnboarded, isConfigLoading, loading]);
+  }, [isAdminRoute, isCustomerPortalRoute, isOnboarded, isConfigLoading, loading]);
 
   // Dark Mode nur im App-Bereich aktivieren (nicht im Welcome/Login-Bereich)
   useEffect(() => {
-    const enableTheme = isOnboarded || isAdminRoute;
+    const enableTheme = isOnboarded || isAdminRoute || isCustomerPortalRoute;
     window.dispatchEvent(
       new CustomEvent("app:set-theme-enabled", {
         detail: { enabled: enableTheme },
       })
     );
-  }, [isOnboarded, isAdminRoute]);
+  }, [isOnboarded, isAdminRoute, isCustomerPortalRoute]);
 
   // Onboarding abschließen
   const handleOnboardingComplete = () => {
@@ -208,6 +219,14 @@ function AppContent() {
     return (
       <ErrorBoundary>
         <AdminRoute />
+      </ErrorBoundary>
+    );
+  }
+
+  if (isCustomerPortalRoute) {
+    return (
+      <ErrorBoundary>
+        <CustomerPortalRoute />
       </ErrorBoundary>
     );
   }

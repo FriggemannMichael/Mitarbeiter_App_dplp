@@ -7,6 +7,14 @@ from api.views.employee_device import init_employee_device
 from api.views.users import save_user, get_user
 from api.views.timesheets import save_timesheet, get_timesheet, list_timesheets, archive_timesheet
 from api.views.email import test_email, send_pdf_view
+from api.views.customer_portal import (
+    portal_summary,
+    portal_employees,
+    portal_timesheets,
+    portal_absences,
+    portal_update_timesheet_status,
+    portal_timesheets_csv,
+)
 
 urlpatterns = [
     # Root → Health (verhindert Django 404 Debug-Seite)
@@ -39,6 +47,12 @@ urlpatterns = [
     path('api/get-timesheet', get_timesheet),
     path('api/list-timesheets', list_timesheets),
     path('api/archive-timesheet', archive_timesheet),
+    path('api/portal/summary', portal_summary),
+    path('api/portal/employees', portal_employees),
+    path('api/portal/timesheets', portal_timesheets),
+    path('api/portal/absences', portal_absences),
+    path('api/portal/timesheets.csv', portal_timesheets_csv),
+    path('api/portal/timesheets/<int:timesheet_id>/status', portal_update_timesheet_status),
 
     # Email + PDF – ACHTUNG: send-pdf hat KEIN /api/ Prefix (wie PHP)
     path('api/test-email', test_email),

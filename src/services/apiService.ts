@@ -49,6 +49,60 @@ export interface AccountDto {
   updated_at?: string | null;
 }
 
+export interface PortalSummaryDto {
+  current_week: {
+    year: number;
+    week: number;
+  };
+  metrics: {
+    current_week_hours: number;
+    submitted_timesheets: number;
+    missing_timesheets: number;
+    current_absence_days: number;
+  };
+  missing_employees: string[];
+}
+
+export interface PortalEmployeeDto {
+  employee_name: string;
+  timesheet_count: number;
+  current_week_hours: number;
+  current_absence_days: number;
+  latest_status: string;
+  last_updated_at?: string | null;
+  has_current_week_timesheet: boolean;
+}
+
+export interface PortalTimesheetDto {
+  id: number;
+  employee_name: string;
+  week_year: number;
+  week_number: number;
+  sheet_id: string;
+  customer: string;
+  status: string;
+  workflow_status: string;
+  hours_total: number;
+  absence_days: number;
+  has_signature: boolean;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PortalAbsenceDto {
+  timesheet_id: number;
+  employee_name: string;
+  date: string;
+  absence: string;
+  absence_note: string;
+  week_year: number;
+  week_number: number;
+  sheet_id: string;
+  customer: string;
+}
+
 interface EmployeeDeviceResponse {
   id: number;
   display_name: string;
@@ -323,6 +377,57 @@ class ApiService {
     },
   ): Promise<ApiResponse<AccountDto>> {
     return this.put<AccountDto>(`/api/accounts/${accountId}`, payload);
+  }
+
+  async getPortalSummary(): Promise<ApiResponse<PortalSummaryDto>> {
+    return this.get<PortalSummaryDto>("/api/portal/summary");
+  }
+
+  async getPortalEmployees(): Promise<ApiResponse<PortalEmployeeDto[]>> {
+    return this.get<PortalEmployeeDto[]>("/api/portal/employees");
+  }
+
+  async getPortalTimesheets(params?: {
+    year?: number;
+    week?: number;
+    month?: number;
+    employeeName?: string;
+    status?: string;
+  }): Promise<ApiResponse<PortalTimesheetDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.year != null) search.set("year", String(params.year));
+    if (params?.week != null) search.set("week", String(params.week));
+    if (params?.month != null) search.set("month", String(params.month));
+    if (params?.employeeName) search.set("employeeName", params.employeeName);
+    if (params?.status) search.set("status", params.status);
+    const suffix = search.toString();
+    return this.get<PortalTimesheetDto[]>(
+      `/api/portal/timesheets${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
+  async getPortalAbsences(params?: {
+    employeeName?: string;
+  }): Promise<ApiResponse<PortalAbsenceDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.employeeName) search.set("employeeName", params.employeeName);
+    const suffix = search.toString();
+    return this.get<PortalAbsenceDto[]>(
+      `/api/portal/absences${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
+  async updatePortalTimesheetStatus(
+    timesheetId: number,
+    payload: {
+      status: "reviewed" | "approved" | "rejected";
+      rejectionReason?: string;
+    },
+  ): Promise<ApiResponse<PortalTimesheetDto>> {
+    return this.post<PortalTimesheetDto>(
+      `/api/portal/timesheets/${timesheetId}/status`,
+      payload,
+    );
   }
 
   async initEmployeeDevice(
