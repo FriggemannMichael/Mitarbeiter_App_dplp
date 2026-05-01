@@ -50,19 +50,22 @@ def init_employee_device(request):
         device = get_employee_device_from_token(existing_token, customer_key)
         if device:
             touch_employee_device(device, display_name=display_name)
+            csrf_token = get_employee_csrf_token_from_request(request) or create_employee_csrf_token()
             response = success_response({
                 'device': _serialize_device(device),
                 'created': False,
+                'csrf_token': csrf_token,
             })
-            csrf_token = get_employee_csrf_token_from_request(request) or create_employee_csrf_token()
             set_employee_csrf_cookie(response, csrf_token)
             return response
 
     device, token, _ = ensure_employee_device(customer_key=customer_key, display_name=display_name)
+    csrf_token = create_employee_csrf_token()
     response = success_response({
         'device': _serialize_device(device),
         'created': True,
+        'csrf_token': csrf_token,
     })
-    set_employee_csrf_cookie(response, create_employee_csrf_token())
+    set_employee_csrf_cookie(response, csrf_token)
     set_employee_device_cookie(response, token)
     return response

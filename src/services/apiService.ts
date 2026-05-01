@@ -56,6 +56,12 @@ interface EmployeeDeviceResponse {
   last_seen_at?: string | null;
 }
 
+interface InitEmployeeDevicePayload {
+  device: EmployeeDeviceResponse;
+  created: boolean;
+  csrf_token?: string;
+}
+
 export interface TimesheetApiPayload<TWeekData = unknown> {
   id: number;
   week_year?: number | null;
@@ -70,6 +76,7 @@ class ApiService {
   private customerKey: string;
   private authToken: string;
   private employeeTimesheetSyncSupported: boolean | null = null;
+  private employeeCsrfToken: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -78,6 +85,7 @@ class ApiService {
       typeof window !== "undefined"
         ? window.localStorage.getItem("admin_auth_token") || ""
         : "";
+    this.employeeCsrfToken = "";
   }
 
   setBaseUrl(baseUrl: string): void {
@@ -110,6 +118,10 @@ class ApiService {
 
   setAuthToken(token: string): void {
     this.authToken = (token || "").trim();
+  }
+
+  setEmployeeCsrfToken(token: string): void {
+    this.employeeCsrfToken = (token || "").trim();
   }
 
   private isEmployeeTimesheetSyncEndpoint(endpoint: string): boolean {
@@ -182,7 +194,8 @@ class ApiService {
     if (this.authToken) {
       (defaultHeaders as Record<string, string>)["Authorization"] = `Bearer ${this.authToken}`;
     }
-    const employeeCsrfToken = this.getCookieValue("employee_csrf");
+    const employeeCsrfToken =
+      this.employeeCsrfToken || this.getCookieValue("employee_csrf");
     if (employeeCsrfToken) {
       (defaultHeaders as Record<string, string>)["X-Employee-CSRF"] = employeeCsrfToken;
     }
@@ -312,18 +325,22 @@ class ApiService {
     return this.put<AccountDto>(`/api/accounts/${accountId}`, payload);
   }
 
-  async initEmployeeDevice(displayName?: string): Promise<
-    ApiResponse<{
-      device: EmployeeDeviceResponse;
-      created: boolean;
-    }>
-  > {
+  async initEmployeeDevice(
+    displayName?: string,
+  ): Promise<ApiResponse<InitEmployeeDevicePayload>> {
     if (!this.canUseEmployeeTimesheetSync()) {
       throw new Error("Employee backend sync unavailable");
     }
-    return this.post("/api/employee-device/init", {
+    const response = await this.post<InitEmployeeDevicePayload>(
+      "/api/employee-device/init",
+      {
       displayName: (displayName || "").trim(),
-    });
+      },
+    );
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
   }
 
   async saveTimesheet<TWeekData>(payload: {
