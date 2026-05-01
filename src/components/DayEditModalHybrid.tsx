@@ -32,6 +32,7 @@ import {
 import { DayData, storage } from "../utils/storage";
 import { formatDate, formatHours } from "../utils/formatters";
 import { useConfig } from "../contexts/ConfigContext";
+import { useWeekData } from "../contexts/WeekDataContext";
 import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
 import i18n from "../i18n";
 import { isFeatureEnabled } from "../utils/featureFlags";
@@ -79,6 +80,7 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
 }) => {
   const { t } = useTranslation();
   const { config } = useConfig();
+  const { currentWeek, allSheets } = useWeekData();
 
   // Validator
   const validator = useMemo(
@@ -99,13 +101,41 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
     false,
   );
   const useSimplifiedDayShiftMode = simplifiedDayShiftEnabled;
+  const inMemorySuggestionWeeks = useMemo(() => {
+    const dedupedWeeks = new Map<string, typeof currentWeek>();
+
+    allSheets.forEach((sheet) => {
+      dedupedWeeks.set(`${sheet.year}-${sheet.week}-${sheet.sheetId ?? 1}`, sheet);
+    });
+
+    if (currentWeek) {
+      dedupedWeeks.set(
+        `${currentWeek.year}-${currentWeek.week}-${currentWeek.sheetId ?? 1}`,
+        currentWeek,
+      );
+    }
+
+    return Array.from(dedupedWeeks.values()).filter(
+      (week): week is NonNullable<typeof currentWeek> => Boolean(week),
+    );
+  }, [allSheets, currentWeek]);
   const orderNumberOptions = useMemo(
-    () => storage.getRecentDayFieldValues("orderNumber"),
-    [],
+    () =>
+      storage.getRecentDayFieldValues(
+        "orderNumber",
+        20,
+        inMemorySuggestionWeeks,
+      ),
+    [inMemorySuggestionWeeks],
   );
   const commissionOptions = useMemo(
-    () => storage.getRecentDayFieldValues("commission"),
-    [],
+    () =>
+      storage.getRecentDayFieldValues(
+        "commission",
+        20,
+        inMemorySuggestionWeeks,
+      ),
+    [inMemorySuggestionWeeks],
   );
 
   const handleTimeChange = (

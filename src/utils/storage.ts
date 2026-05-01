@@ -328,31 +328,27 @@ export const storage = {
   getRecentDayFieldValues: (
     field: "orderNumber" | "commission",
     limit: number = 20,
+    additionalWeeks: WeekData[] = [],
   ): string[] => {
     const valuesWithTimestamp: Array<{ value: string; updatedAt: number }> = [];
 
-    storage.getAllWeekKeys().forEach((key) => {
-      const data = localStorage.getItem(key);
-      if (!data) return;
+    const persistedWeeks = storage.getAllStoredWeeks();
+    const allWeeks = [...persistedWeeks, ...additionalWeeks];
 
-      try {
-        const weekData: WeekData = JSON.parse(data);
-        const updatedAt = weekData.updatedAt
-          ? new Date(weekData.updatedAt).getTime()
-          : 0;
+    allWeeks.forEach((weekData) => {
+      const updatedAt = weekData.updatedAt
+        ? new Date(weekData.updatedAt).getTime()
+        : 0;
 
-        weekData.days?.forEach((day) => {
-          const rawValue = day[field];
-          const value =
-            typeof rawValue === "string" ? rawValue.trim() : "";
+      weekData.days?.forEach((day) => {
+        const rawValue = day[field];
+        const value =
+          typeof rawValue === "string" ? rawValue.trim() : "";
 
-          if (!value) return;
+        if (!value) return;
 
-          valuesWithTimestamp.push({ value, updatedAt });
-        });
-      } catch (error) {
-        console.warn(`Failed to parse week data for key ${key}:`, error);
-      }
+        valuesWithTimestamp.push({ value, updatedAt });
+      });
     });
 
     const latestByValue = new Map<string, number>();
