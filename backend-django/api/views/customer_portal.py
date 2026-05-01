@@ -81,6 +81,10 @@ def _extract_employee_name(timesheet: Timesheet) -> str:
     return f"Mitarbeiter #{timesheet.employee_device_id or timesheet.id}"
 
 
+def _employee_name_key(value: str) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
 def _extract_review_meta(week_data: dict) -> dict:
     review = week_data.get("portalReview") or {}
     if not isinstance(review, dict):
@@ -208,31 +212,39 @@ def _get_timesheet_queryset(customer_key: str):
 
 
 def _get_known_employee_names(customer_key: str, timesheets: list[Timesheet]) -> list[str]:
-    names: set[str] = set()
+    names_by_key: dict[str, str] = {}
     for device_name in EmployeeDevice.objects.filter(
         customer_key=customer_key,
         is_active=True,
     ).exclude(display_name="").values_list("display_name", flat=True):
         value = (device_name or "").strip()
         if value:
-            names.add(value)
+            key = _employee_name_key(value)
+            if key and key not in names_by_key:
+                names_by_key[key] = value
 
     for timesheet in timesheets:
         value = _extract_employee_name(timesheet).strip()
         if value:
-            names.add(value)
+            key = _employee_name_key(value)
+            if key and key not in names_by_key:
+                names_by_key[key] = value
 
-    return sorted(names, key=lambda value: value.lower())
+    return sorted(names_by_key.values(), key=lambda value: value.lower())
 
 
 def _build_missing_employees(employee_names: list[str], timesheets: list[Timesheet]) -> list[str]:
     current_year, current_week = _current_week_identity()
     present_names = {
-        _extract_employee_name(timesheet)
+        _employee_name_key(_extract_employee_name(timesheet))
         for timesheet in timesheets
         if timesheet.week_year == current_year and timesheet.week_number == current_week
     }
-    return [name for name in employee_names if name not in present_names]
+    return [
+        name
+        for name in employee_names
+        if _employee_name_key(name) not in present_names
+    ]
 
 
 @require_roles(*PORTAL_READ_ROLES)
@@ -282,7 +294,8 @@ def portal_employees(request):
 
     by_employee: dict[str, dict] = {}
     for employee_name in _get_known_employee_names(customer_key, queryset):
-        by_employee[employee_name] = {
+        employee_key = _employee_name_key(employee_name)
+        by_employee[employee_key] = {
             "employee_name": employee_name,
             "timesheet_count": 0,
             "current_week_hours": 0.0,
@@ -294,8 +307,9 @@ def portal_employees(request):
 
     for timesheet in queryset:
         employee_name = _extract_employee_name(timesheet)
+        employee_key = _employee_name_key(employee_name)
         days = (timesheet.week_data or {}).get("days") or []
-        item = by_employee.setdefault(employee_name, {
+        item = by_employee.setdefault(employee_key, {
             "employee_name": employee_name,
             "timesheet_count": 0,
             "current_week_hours": 0.0,
