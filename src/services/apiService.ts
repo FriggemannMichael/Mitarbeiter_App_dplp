@@ -60,6 +60,8 @@ export interface PortalSummaryDto {
     submitted_timesheets: number;
     missing_timesheets: number;
     current_absence_days: number;
+    ready_for_approval: number;
+    ready_for_review: number;
   };
   missing_employees: string[];
 }
@@ -83,10 +85,13 @@ export interface PortalTimesheetDto {
   customer: string;
   week_data: WeekData;
   status: string;
+  portal_queue?: string;
   workflow_status: string;
   hours_total: number;
   absence_days: number;
   has_signature: boolean;
+  has_employee_signature: boolean;
+  has_supervisor_signature: boolean;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   rejection_reason?: string | null;

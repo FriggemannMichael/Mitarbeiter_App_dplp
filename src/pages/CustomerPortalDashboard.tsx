@@ -47,6 +47,13 @@ function formatStatus(status?: string): string {
   return statusLabels[status || ""] || status || "-";
 }
 
+function formatPortalQueue(portalQueue?: string, status?: string): string {
+  if (status !== "submitted") {
+    return "-";
+  }
+  return portalQueue === "review" ? "Zu pruefen" : "Freizugeben";
+}
+
 export const CustomerPortalDashboard: React.FC = () => {
   const { config } = useConfig();
   const currentUser = portalAuthService.getCurrentUser();
@@ -128,13 +135,19 @@ export const CustomerPortalDashboard: React.FC = () => {
     };
   }, [pdfPreviewUrl]);
 
-  const employeeCountWithoutCurrentWeekSheet = useMemo(
-    () => employees.filter((employee) => !employee.has_current_week_timesheet).length,
-    [employees],
+  const approvalTimesheets = useMemo(
+    () =>
+      timesheets
+        .filter((item) => item.status === "submitted" && item.portal_queue === "approval")
+        .slice(0, 8),
+    [timesheets],
   );
 
-  const submittedTimesheets = useMemo(
-    () => timesheets.filter((item) => item.status === "submitted").slice(0, 8),
+  const reviewTimesheets = useMemo(
+    () =>
+      timesheets
+        .filter((item) => item.status === "submitted" && item.portal_queue === "review")
+        .slice(0, 8),
     [timesheets],
   );
 
@@ -245,7 +258,9 @@ export const CustomerPortalDashboard: React.FC = () => {
       "Status",
       "Stunden",
       "Abwesenheitstage",
-      "Unterschrift",
+      "Klassifizierung",
+      "Mitarbeiter-Signatur",
+      "Vorgesetzten-Signatur",
       "Kommentar",
       "Aktualisiert",
     ];
@@ -259,7 +274,9 @@ export const CustomerPortalDashboard: React.FC = () => {
       formatStatus(timesheet.status),
       timesheet.hours_total,
       timesheet.absence_days,
-      timesheet.has_signature ? "ja" : "nein",
+      formatPortalQueue(timesheet.portal_queue, timesheet.status),
+      timesheet.has_employee_signature ? "ja" : "nein",
+      timesheet.has_supervisor_signature ? "ja" : "nein",
       timesheet.customer_comment || "",
       timesheet.updated_at || "",
     ]);
@@ -333,16 +350,14 @@ export const CustomerPortalDashboard: React.FC = () => {
                 icon: <CalendarClock className="w-5 h-5" />,
               },
               {
-                label: "Fehlende Stundenzettel",
-                value:
-                  summary?.metrics.missing_timesheets ??
-                  employeeCountWithoutCurrentWeekSheet,
+                label: "Freizugeben",
+                value: summary?.metrics.ready_for_approval ?? 0,
                 suffix: "",
                 icon: <Users className="w-5 h-5" />,
               },
               {
-                label: "Audit-Eintraege",
-                value: auditEntries.length,
+                label: "Zu pruefen",
+                value: summary?.metrics.ready_for_review ?? 0,
                 suffix: "",
                 icon: <ShieldCheck className="w-5 h-5" />,
               },
@@ -403,10 +418,89 @@ export const CustomerPortalDashboard: React.FC = () => {
               <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6">
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Eingereichte Stundenzettel
+                    Freizugeben
                   </h2>
                   <div className="space-y-3">
-                    {submittedTimesheets.map((timesheet) => (
+                    {approvalTimesheets.map((timesheet) => (
+                      <div
+                        key={timesheet.id}
+                        className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+                      >
+                        <div>
+                          <div className="font-semibold text-slate-900">
+                            {timesheet.employee_name}
+                          </div>
+                          <div className="text-sm text-slate-600">
+                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
+                            {timesheet.customer || "Kein Kunde"}
+                          </div>
+                          {timesheet.customer_comment && (
+                            <div className="text-sm text-slate-500 mt-2">
+                              Kommentar: {timesheet.customer_comment}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              statusClasses[timesheet.status] || statusClasses.open
+                            }`}
+                          >
+                            {formatStatus(timesheet.status)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenPdfPreview(timesheet)}
+                            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            PDF
+                          </button>
+                          {canApprove && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void handleAddComment(timesheet.id)}
+                                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Kommentar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleReviewAction(timesheet.id, "approved")}
+                                className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 inline-flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Freigeben
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleReviewAction(timesheet.id, "rejected")}
+                                className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                Ablehnen
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {approvalTimesheets.length === 0 && (
+                      <div className="text-sm text-slate-500">
+                        Aktuell keine freizugebenden Stundenzettel.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">
+                    Zu pruefen
+                  </h2>
+                  <div className="space-y-3">
+                    {reviewTimesheets.map((timesheet) => (
                       <div
                         key={timesheet.id}
                         className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
@@ -460,14 +554,6 @@ export const CustomerPortalDashboard: React.FC = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleReviewAction(timesheet.id, "approved")}
-                                className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 inline-flex items-center gap-1"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Freigeben
-                              </button>
-                              <button
-                                type="button"
                                 onClick={() => void handleReviewAction(timesheet.id, "rejected")}
                                 className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1"
                               >
@@ -479,31 +565,9 @@ export const CustomerPortalDashboard: React.FC = () => {
                         </div>
                       </div>
                     ))}
-                    {submittedTimesheets.length === 0 && (
+                    {reviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine eingereichten Stundenzettel.
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
-                  <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Fehlende Stundenzettel
-                  </h2>
-                  <div className="space-y-2">
-                    {(summary?.missing_employees || []).map((employeeName) => (
-                      <div
-                        key={employeeName}
-                        className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                      >
-                        {employeeName}
-                      </div>
-                    ))}
-                    {(summary?.missing_employees || []).length === 0 && (
-                      <div className="text-sm text-slate-500">
-                        Fuer die laufende Woche sind aktuell keine fehlenden
-                        Stundenzettel erkannt.
+                        Aktuell keine zu pruefenden Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -588,8 +652,9 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <th className="py-2 pr-4">Woche</th>
                       <th className="py-2 pr-4">Kunde</th>
                       <th className="py-2 pr-4">Stunden</th>
+                      <th className="py-2 pr-4">Klassifizierung</th>
                       <th className="py-2 pr-4">Status und Verlauf</th>
-                      <th className="py-2 pr-4">Unterschrift</th>
+                      <th className="py-2 pr-4">Unterschriften</th>
                       <th className="py-2 pr-4">PDF</th>
                       {canApprove && <th className="py-2 pr-4">Aktion</th>}
                     </tr>
@@ -606,6 +671,11 @@ export const CustomerPortalDashboard: React.FC = () => {
                         </td>
                         <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
                         <td className="py-3 pr-4">{timesheet.hours_total}h</td>
+                        <td className="py-3 pr-4">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {formatPortalQueue(timesheet.portal_queue, timesheet.status)}
+                          </span>
+                        </td>
                         <td className="py-3 pr-4">
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -647,7 +717,10 @@ export const CustomerPortalDashboard: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="py-3 pr-4">{timesheet.has_signature ? "Ja" : "Nein"}</td>
+                        <td className="py-3 pr-4 text-xs text-slate-700">
+                          <div>MA: {timesheet.has_employee_signature ? "Ja" : "Nein"}</div>
+                          <div>VL: {timesheet.has_supervisor_signature ? "Ja" : "Nein"}</div>
+                        </td>
                         <td className="py-3 pr-4">
                           <button
                             type="button"

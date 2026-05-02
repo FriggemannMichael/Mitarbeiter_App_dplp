@@ -19,7 +19,6 @@ from api.services.auth_service import (
     require_roles,
 )
 from api.services.audit_service import audit
-from api.services.config_service import load_config
 from api.services.tenant_service import get_request_customer_key
 
 
@@ -161,8 +160,29 @@ def _count_absence_days(days: list[dict]) -> int:
     return count
 
 
-def _has_signature(week_data: dict) -> bool:
+def _has_employee_signature(week_data: dict) -> bool:
     return bool((week_data.get("employeeSignature") or "").strip())
+
+
+def _has_supervisor_signature(week_data: dict) -> bool:
+    return bool((week_data.get("supervisorSignature") or "").strip())
+
+
+def _portal_queue(week_data: dict) -> str:
+    status = _derive_review_status(week_data)
+    if status != REVIEW_STATUS_SUBMITTED:
+        return ""
+    if _has_employee_signature(week_data) and _has_supervisor_signature(week_data):
+        return "review"
+    return "approval"
+
+
+def _portal_queue_label(portal_queue: str) -> str:
+    if portal_queue == "review":
+        return "Zu pruefen"
+    if portal_queue == "approval":
+        return "Freizugeben"
+    return ""
 
 
 def _serialize_timesheet_portal(timesheet: Timesheet) -> dict:
@@ -179,10 +199,13 @@ def _serialize_timesheet_portal(timesheet: Timesheet) -> dict:
         "customer": (week_data.get("customer") or "").strip(),
         "week_data": week_data,
         "status": _derive_review_status(week_data),
+        "portal_queue": _portal_queue(week_data),
         "workflow_status": week_data.get("status") or "OPEN",
         "hours_total": _sum_week_hours(days),
         "absence_days": _count_absence_days(days),
-        "has_signature": _has_signature(week_data),
+        "has_signature": _has_employee_signature(week_data),
+        "has_employee_signature": _has_employee_signature(week_data),
+        "has_supervisor_signature": _has_supervisor_signature(week_data),
         "reviewed_by": review.get("reviewedBy"),
         "reviewed_at": review.get("reviewedAt"),
         "rejection_reason": review.get("rejectionReason"),
@@ -284,18 +307,27 @@ def portal_summary(request):
     submitted_count = sum(
         1 for timesheet in queryset if _derive_review_status(timesheet.week_data or {}) == REVIEW_STATUS_SUBMITTED
     )
-    known_employees = _get_known_employees(customer_key, queryset)
-    missing_employees = _build_missing_employees(known_employees, queryset)
+    ready_for_approval = 0
+    ready_for_review = 0
+    for timesheet in queryset:
+        if _derive_review_status(timesheet.week_data or {}) != REVIEW_STATUS_SUBMITTED:
+            continue
+        if _portal_queue(timesheet.week_data or {}) == "review":
+            ready_for_review += 1
+        else:
+            ready_for_approval += 1
 
     return success_response({
         "current_week": {"year": current_year, "week": current_week},
         "metrics": {
             "current_week_hours": round(current_week_hours, 2),
             "submitted_timesheets": submitted_count,
-            "missing_timesheets": len(missing_employees),
+            "missing_timesheets": 0,
             "current_absence_days": current_absences,
+            "ready_for_approval": ready_for_approval,
+            "ready_for_review": ready_for_review,
         },
-        "missing_employees": missing_employees,
+        "missing_employees": [],
     })
 
 
@@ -322,7 +354,7 @@ def portal_employees(request):
 
     for timesheet in queryset:
         employee_name = _extract_employee_name(timesheet)
-        employee_key = _employee_name_key(employee_name)
+        employee_key = _employee_identity_key(timesheet.employee_device_id, employee_name)
         days = (timesheet.week_data or {}).get("days") or []
         item = by_employee.setdefault(employee_key, {
             "employee_name": employee_name,
@@ -477,11 +509,7 @@ def portal_update_timesheet_status(request, timesheet_id: int):
     if not timesheet:
         return error_response("Timesheet not found", 404)
 
-    config = load_config(customer_key) or {}
-    requires_signature = bool((config.get("work") or {}).get("enable_signature_requirement", True))
     week_data = dict(timesheet.week_data or {})
-    if next_status == REVIEW_STATUS_APPROVED and requires_signature and not _has_signature(week_data):
-        return error_response("Approval requires employee signature", 400)
     if next_status == REVIEW_STATUS_REJECTED and not rejection_reason:
         return error_response("rejectionReason required", 400)
 
@@ -609,7 +637,9 @@ def portal_timesheets_csv(request):
         "Status",
         "Stunden",
         "Abwesenheitstage",
-        "Unterschrift",
+        "Klassifizierung",
+        "Mitarbeiter-Signatur",
+        "Vorgesetzten-Signatur",
         "Aktualisiert",
     ])
 
@@ -624,7 +654,9 @@ def portal_timesheets_csv(request):
             item["status"],
             item["hours_total"],
             item["absence_days"],
-            "ja" if item["has_signature"] else "nein",
+            _portal_queue_label(item["portal_queue"]),
+            "ja" if item["has_employee_signature"] else "nein",
+            "ja" if item["has_supervisor_signature"] else "nein",
             item["updated_at"] or "",
         ])
 
