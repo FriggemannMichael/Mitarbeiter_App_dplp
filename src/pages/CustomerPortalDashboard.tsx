@@ -30,7 +30,7 @@ type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit"
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "Geprueft",
+  reviewed: "Geprüft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -51,7 +51,7 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   if (status !== "submitted") {
     return "-";
   }
-  return portalQueue === "review" ? "Zu pruefen" : "Freizugeben";
+  return portalQueue === "review" ? "Zu prüfen" : "Freizugeben";
 }
 
 export const CustomerPortalDashboard: React.FC = () => {
@@ -92,7 +92,7 @@ export const CustomerPortalDashboard: React.FC = () => {
       ]);
 
       if (!summaryResponse.success) {
-        throw new Error(summaryResponse.error || "Portal-Uebersicht konnte nicht geladen werden");
+        throw new Error(summaryResponse.error || "Portal-Übersicht konnte nicht geladen werden");
       }
       if (!employeesResponse.success) {
         throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
@@ -171,7 +171,7 @@ export const CustomerPortalDashboard: React.FC = () => {
   ) => {
     const comment =
       status !== "approved"
-        ? window.prompt("Optionalen Kommentar fuer den Kundenverlauf eingeben:", "") || ""
+        ? window.prompt("Optionalen Kommentar für den Kundenverlauf eingeben:", "") || ""
         : "";
     const rejectionReason =
       status === "rejected"
@@ -309,7 +309,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                 Kundenportal
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Freigaben und Kundenpruefung
+                Freigaben und Kundenprüfung
               </h1>
               <p className="text-sm text-slate-600 mt-2">
                 Angemeldet als {currentUser?.username} ({currentUser?.role || "user"})
@@ -356,7 +356,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                 icon: <Users className="w-5 h-5" />,
               },
               {
-                label: "Zu pruefen",
+                label: "Zu prüfen",
                 value: summary?.metrics.ready_for_review ?? 0,
                 suffix: "",
                 icon: <ShieldCheck className="w-5 h-5" />,
@@ -497,7 +497,7 @@ export const CustomerPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Zu pruefen
+                    Zu prüfen
                   </h2>
                   <div className="space-y-3">
                     {reviewTimesheets.map((timesheet) => (
@@ -550,7 +550,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Pruefen
+                                Prüfen
                               </button>
                               <button
                                 type="button"
@@ -567,7 +567,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                     ))}
                     {reviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine zu pruefenden Stundenzettel.
+                        Aktuell keine zu prüfenden Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -630,7 +630,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <option value="">Alle Status</option>
                       <option value="open">Offen</option>
                       <option value="submitted">Eingereicht</option>
-                      <option value="reviewed">Geprueft</option>
+                      <option value="reviewed">Geprüft</option>
                       <option value="approved">Freigegeben</option>
                       <option value="rejected">Abgelehnt</option>
                     </select>
@@ -776,7 +776,7 @@ export const CustomerPortalDashboard: React.FC = () => {
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  Abwesenheitsuebersicht
+                  Abwesenheitsübersicht
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -847,7 +847,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                     {auditEntries.length === 0 && (
                       <tr>
                         <td colSpan={6} className="py-6 text-center text-slate-500">
-                          Noch keine Audit-Eintraege vorhanden.
+                          Noch keine Audit-Einträge vorhanden.
                         </td>
                       </tr>
                     )}
@@ -888,7 +888,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
                       className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                      Pruefen
+                                Prüfen
                     </button>
                     <button
                       type="button"

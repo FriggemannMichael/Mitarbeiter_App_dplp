@@ -179,7 +179,7 @@ def _portal_queue(week_data: dict) -> str:
 
 def _portal_queue_label(portal_queue: str) -> str:
     if portal_queue == "review":
-        return "Zu pruefen"
+        return "Zu prüfen"
     if portal_queue == "approval":
         return "Freizugeben"
     return ""
