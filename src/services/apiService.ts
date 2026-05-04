@@ -166,6 +166,7 @@ export interface EmployeeSessionDto {
   last_name: string;
   display_name: string;
   phone_number: string;
+  has_name_duplicates?: boolean;
   customer_key: string;
   last_login_at?: string | null;
 }
@@ -574,6 +575,13 @@ class ApiService {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
     return response;
+  }
+
+  async updateEmployeePhone(payload: {
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    return this.post<EmployeeAuthPayload>("/api/employee/update-phone", payload);
   }
 
   async logoutEmployee(): Promise<ApiResponse<null>> {

@@ -98,7 +98,7 @@ const LAST_BACKUP_DATE_KEY = "wpdl_last_backup_date";
 const BACKUP_REMINDER_DISMISSED_KEY = "wpdl_backup_reminder_dismissed";
 const FIRST_USE_DATE_KEY = "wpdl_first_use_date";
 const THEME_KEY = "wpdl_theme";
-const BACKEND_TIMESHEET_MIGRATION_PREFIX = "wpdl_backend_timesheet_migration_v1_";
+const BACKEND_TIMESHEET_MIGRATION_PREFIX = "wpdl_backend_timesheet_migration_v2_";
 
 // Helper Funktionen für localStorage
 export const storage = {
@@ -310,21 +310,19 @@ export const storage = {
     });
   },
 
-  hasCompletedBackendTimesheetMigration: (employeeName: string): boolean => {
-    const normalizedName = employeeName.trim().toLowerCase();
-    if (!normalizedName) return false;
+  hasCompletedBackendTimesheetMigration: (employeeId: number): boolean => {
+    if (!Number.isFinite(employeeId) || employeeId <= 0) return false;
     return (
       localStorage.getItem(
-        `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${normalizedName}`,
+        `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${employeeId}`,
       ) === "true"
     );
   },
 
-  markBackendTimesheetMigrationComplete: (employeeName: string): void => {
-    const normalizedName = employeeName.trim().toLowerCase();
-    if (!normalizedName) return;
+  markBackendTimesheetMigrationComplete: (employeeId: number): void => {
+    if (!Number.isFinite(employeeId) || employeeId <= 0) return;
     localStorage.setItem(
-      `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${normalizedName}`,
+      `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${employeeId}`,
       "true",
     );
   },

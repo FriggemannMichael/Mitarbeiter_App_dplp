@@ -37,6 +37,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const pdfConfig = usePdfConfig();
   const { config } = useConfig();
   const defaultLogoSrc = `${import.meta.env.BASE_URL}customers/DPL%20Logo.svg`;
+  const privacyPolicyUrl = "https://www.dplp.de/datenschutz/";
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
   const [mode, setMode] = useState<WelcomeMode>("register");
   const [firstName, setFirstName] = useState("");
@@ -71,11 +72,11 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
     }
 
     if (!/^\d{4}$/.test(pin.trim())) {
-      nextErrors.pin = "PIN muss genau 4 Ziffern haben";
+      nextErrors.pin = t("welcome.pin.invalid") || "PIN muss genau 4 Ziffern haben";
     }
 
     if (mode !== "login" && pin.trim() !== pinRepeat.trim()) {
-      nextErrors.pinRepeat = "PIN-Wiederholung stimmt nicht überein";
+      nextErrors.pinRepeat = t("welcome.pin.mismatch") || "PIN-Wiederholung stimmt nicht überein";
     }
 
     if (mode === "register" && !consent) {
@@ -134,7 +135,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         });
         const employee = response.data?.employee;
         if (!response.success || !employee) {
-          throw new Error(response.error || "Registrierung fehlgeschlagen");
+          throw new Error(response.error || t("welcome.error.register") || "Registrierung fehlgeschlagen");
         }
         completeAuthentication(employee);
       } else if (mode === "login") {
@@ -146,7 +147,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         });
         const employee = response.data?.employee;
         if (!response.success || !employee) {
-          throw new Error(response.error || "Anmeldung fehlgeschlagen");
+          throw new Error(response.error || t("welcome.error.login") || "Anmeldung fehlgeschlagen");
         }
         setLoginNeedsPhoneNumber(false);
         completeAuthentication(employee);
@@ -159,7 +160,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         });
         const employee = response.data?.employee;
         if (!response.success || !employee) {
-          throw new Error(response.error || "PIN konnte nicht zurückgesetzt werden");
+          throw new Error(response.error || t("welcome.error.resetPin") || "PIN konnte nicht zurückgesetzt werden");
         }
         completeAuthentication(employee);
       }
@@ -176,7 +177,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
       setSubmitError(
         submitErrorValue instanceof Error
           ? submitErrorValue.message
-          : "Aktion konnte nicht abgeschlossen werden",
+          : t("welcome.error.generic") || "Aktion konnte nicht abgeschlossen werden",
       );
     } finally {
       setIsSubmitting(false);
@@ -204,19 +205,19 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
 
   const modeDescription =
     mode === "register"
-      ? "Beim ersten Mal bitte Name, Handynummer und PIN festlegen."
+      ? t("welcome.mode.desc.register") || "Beim ersten Mal bitte Name, Handynummer und PIN festlegen."
       : mode === "login"
         ? loginNeedsPhoneNumber
-          ? "Für diesen Namen gibt es mehrere Mitarbeiter. Bitte zusätzlich die Handynummer eingeben."
-          : "Bitte mit Vorname, Nachname und PIN anmelden."
-        : "Handynummer eingeben und eine neue PIN festlegen.";
+          ? t("welcome.mode.desc.loginDuplicate") || "Für diesen Namen gibt es mehrere Mitarbeiter. Bitte zusätzlich die Handynummer eingeben."
+          : t("welcome.mode.desc.login") || "Bitte mit Vorname, Nachname und PIN anmelden."
+        : t("welcome.mode.desc.resetPin") || "Handynummer eingeben und eine neue PIN festlegen.";
 
   const submitLabel =
     mode === "register"
-      ? "Jetzt registrieren"
+      ? t("welcome.submit.register") || "Jetzt registrieren"
       : mode === "login"
-        ? "Anmelden"
-        : "PIN zurücksetzen";
+        ? t("welcome.submit.login") || "Anmelden"
+        : t("welcome.submit.resetPin") || "PIN zurücksetzen";
 
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
@@ -252,9 +253,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
             <div className="p-6 sm:p-8 space-y-6">
               <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
                 {[
-                  { id: "register", label: "Registrieren" },
-                  { id: "login", label: "Anmelden" },
-                  { id: "resetPin", label: "PIN vergessen" },
+                  { id: "register", label: t("welcome.mode.register") || "Registrieren" },
+                  { id: "login", label: t("welcome.mode.login") || "Anmelden" },
+                  { id: "resetPin", label: t("welcome.mode.resetPin") || "PIN vergessen" },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -371,7 +372,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                   <div>
                     <label className="block mb-2">
                       <span className="text-slate-700 font-medium">
-                        Handynummer <span className="text-red-500">*</span>
+                        {t("welcome.phoneNumber") || "Handynummer"} <span className="text-red-500">*</span>
                       </span>
                       <input
                         type="tel"
@@ -382,7 +383,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                             setErrors({ ...errors, phoneNumber: undefined });
                           }
                         }}
-                        placeholder="z. B. 0176 12345678"
+                        placeholder={t("welcome.placeholders.phoneNumber") || "z. B. 0176 12345678"}
                         className={`input-field mt-2 ${
                           errors.phoneNumber ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
                         }`}
@@ -398,7 +399,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                   <div>
                     <label className="block mb-2">
                       <span className="text-slate-700 font-medium">
-                        4-stellige PIN <span className="text-red-500">*</span>
+                        {t("welcome.pin") || "4-stellige PIN"} <span className="text-red-500">*</span>
                       </span>
                       <input
                         type="password"
@@ -426,7 +427,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                     <div>
                       <label className="block mb-2">
                         <span className="text-slate-700 font-medium">
-                          PIN wiederholen <span className="text-red-500">*</span>
+                          {t("welcome.pinRepeat") || "PIN wiederholen"} <span className="text-red-500">*</span>
                         </span>
                         <input
                           type="password"
@@ -489,8 +490,16 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                             className="mt-4 pt-4 border-t border-slate-200"
                           >
                             <p className="text-sm text-slate-600 leading-relaxed">
-                              Ihre Daten werden für Anmeldung, Stundenzettel und Freigaben in der App und im Backend gespeichert.
+                              {t("welcome.privacy.text")}
                             </p>
+                            <a
+                              href={privacyPolicyUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex text-sm font-medium text-primary-700 hover:text-primary-800 underline underline-offset-2"
+                            >
+                              {t("welcome.privacy.link") || "Datenschutzhinweise öffnen"}
+                            </a>
                           </motion.div>
                         )}
                       </div>
@@ -516,7 +525,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                           />
                         </div>
                         <span className="text-sm text-slate-600 flex-1 pt-0.5">
-                          Ich habe die Datenschutzinformationen gelesen und stimme der Speicherung meiner Daten zu.
+                          {t("welcome.consent")}
                         </span>
                       </label>
                       {errors.consent && (
@@ -542,7 +551,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                     disabled={isSubmitting}
                     className="w-full py-3 text-base font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? "Bitte warten..." : submitLabel}
+                    {isSubmitting ? t("welcome.submitting") || "Bitte warten..." : submitLabel}
                   </button>
                 </motion.div>
               </form>

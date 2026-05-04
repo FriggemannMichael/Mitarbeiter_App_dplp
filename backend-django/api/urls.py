@@ -7,6 +7,7 @@ from api.views.employee_auth import (
     employee_register,
     employee_reset_pin,
     employee_session,
+    employee_update_phone,
 )
 from api.views.config import app_config, admin_config, save_admin_config, change_password
 from api.views.accounts import list_accounts, create_account, update_account
@@ -51,6 +52,7 @@ urlpatterns = [
     path('api/employee/logout', employee_logout),
     path('api/employee/session', employee_session),
     path('api/employee/reset-pin', employee_reset_pin),
+    path('api/employee/update-phone', employee_update_phone),
 
     # User
     path('api/save-user', save_user),

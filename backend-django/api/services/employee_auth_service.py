@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 import bcrypt
+from django.core.cache import cache
 from django.utils import timezone
 
 from api.models import EmployeeProfile, EmployeeSession, Timesheet
@@ -32,6 +33,12 @@ EMPLOYEE_SESSION_COOKIE_SAMESITE = (
 EMPLOYEE_SESSION_COOKIE_MAX_AGE = int(
     os.environ.get('EMPLOYEE_SESSION_COOKIE_MAX_AGE', str(60 * 60 * 24 * 30))
 )
+EMPLOYEE_AUTH_MAX_ATTEMPTS = int(
+    os.environ.get('EMPLOYEE_AUTH_MAX_ATTEMPTS', '5')
+)
+EMPLOYEE_AUTH_LOCK_SECONDS = int(
+    os.environ.get('EMPLOYEE_AUTH_LOCK_SECONDS', str(15 * 60))
+)
 
 
 @dataclass
@@ -40,6 +47,45 @@ class EmployeeAuthError(Exception):
     status: int = 400
     code: str | None = None
     details: dict | None = None
+
+
+def _build_auth_rate_limit_cache_key(action: str, identity: str, suffix: str) -> str:
+    normalized_identity = hashlib.sha256((identity or '').encode('utf-8')).hexdigest()
+    return f'employee-auth:{action}:{suffix}:{normalized_identity}'
+
+
+def enforce_employee_auth_rate_limit(action: str, identity: str) -> None:
+    lock_key = _build_auth_rate_limit_cache_key(action, identity, 'lock')
+    locked_until = cache.get(lock_key)
+    if not locked_until:
+        return
+
+    remaining_seconds = max(int((locked_until - timezone.now()).total_seconds()), 1)
+    raise EmployeeAuthError(
+        'Zu viele Fehlversuche. Bitte später erneut versuchen.',
+        status=429,
+        code='RATE_LIMITED',
+        details={'retryAfterSeconds': remaining_seconds},
+    )
+
+
+def record_employee_auth_failure(action: str, identity: str) -> None:
+    attempts_key = _build_auth_rate_limit_cache_key(action, identity, 'attempts')
+    lock_key = _build_auth_rate_limit_cache_key(action, identity, 'lock')
+    attempts = int(cache.get(attempts_key) or 0) + 1
+    cache.set(attempts_key, attempts, EMPLOYEE_AUTH_LOCK_SECONDS)
+    if attempts < EMPLOYEE_AUTH_MAX_ATTEMPTS:
+        return
+
+    locked_until = timezone.now() + timedelta(seconds=EMPLOYEE_AUTH_LOCK_SECONDS)
+    cache.set(lock_key, locked_until, EMPLOYEE_AUTH_LOCK_SECONDS)
+
+
+def reset_employee_auth_failures(action: str, identity: str) -> None:
+    cache.delete_many([
+        _build_auth_rate_limit_cache_key(action, identity, 'attempts'),
+        _build_auth_rate_limit_cache_key(action, identity, 'lock'),
+    ])
 
 
 def normalize_person_name(value: str | None) -> str:
@@ -136,6 +182,21 @@ def _find_active_profiles_by_name(customer_key: str, first_name: str, last_name:
             first_name__iexact=first_name_normalized,
             last_name__iexact=last_name_normalized,
         ).order_by('-updated_at', '-id')
+    )
+
+
+def has_duplicate_name_profiles(profile: EmployeeProfile) -> bool:
+    if not profile.customer_key or not profile.first_name or not profile.last_name:
+        return False
+    return (
+        EmployeeProfile.objects.filter(
+            customer_key=profile.customer_key,
+            is_active=True,
+            first_name__iexact=profile.first_name,
+            last_name__iexact=profile.last_name,
+        )
+        .exclude(pk=profile.pk)
+        .exists()
     )
 
 
@@ -266,6 +327,37 @@ def reset_employee_pin(
     return profile
 
 
+def update_employee_phone(
+    *,
+    profile: EmployeeProfile,
+    new_phone_number: str,
+    pin: str,
+) -> EmployeeProfile:
+    pin_validated = validate_pin(pin)
+    phone_number_normalized = normalize_phone_number(new_phone_number)
+
+    if not phone_number_normalized:
+        raise EmployeeAuthError('Handynummer ist erforderlich')
+    if not verify_pin(pin_validated, profile.pin_hash):
+        raise EmployeeAuthError('Ungültige PIN', status=401)
+    if phone_number_normalized == profile.phone_number:
+        return profile
+
+    existing_by_phone = (
+        EmployeeProfile.objects
+        .filter(customer_key=profile.customer_key, phone_number=phone_number_normalized)
+        .exclude(pk=profile.pk)
+        .order_by('-updated_at', '-id')
+        .first()
+    )
+    if existing_by_phone:
+        raise EmployeeAuthError('Für diese Handynummer existiert bereits ein Mitarbeiterkonto', status=409)
+
+    profile.phone_number = phone_number_normalized
+    profile.save(update_fields=['phone_number', 'updated_at'])
+    return profile
+
+
 def create_employee_session(profile: EmployeeProfile, customer_key: str) -> tuple[EmployeeSession, str]:
     token = create_employee_session_token()
     session = EmployeeSession.objects.create(
@@ -295,6 +387,7 @@ def serialize_employee_profile(profile: EmployeeProfile) -> dict:
         'last_name': profile.last_name,
         'display_name': profile.display_name or build_display_name(profile.first_name, profile.last_name),
         'phone_number': profile.phone_number,
+        'has_name_duplicates': has_duplicate_name_profiles(profile),
         'customer_key': profile.customer_key,
         'last_login_at': profile.last_login_at.isoformat() if profile.last_login_at else None,
     }

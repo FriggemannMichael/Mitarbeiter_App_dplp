@@ -75,7 +75,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     storage.getTheme()
   );
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showPhoneUpdateModal, setShowPhoneUpdateModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [phoneUpdatePin, setPhoneUpdatePin] = useState("");
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
+  const [phoneUpdateError, setPhoneUpdateError] = useState("");
+  const [phoneUpdateSuccess, setPhoneUpdateSuccess] = useState("");
+  const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<{
     week: number;
     year: number;
@@ -86,6 +92,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleDeleteAllData = () => {
     storage.clearAllData();
     window.location.reload();
+  };
+
+  const handleUpdatePhoneNumber = async () => {
+    setPhoneUpdateError("");
+    setPhoneUpdateSuccess("");
+
+    const normalizedPhoneNumber = newPhoneNumber.trim();
+    const normalizedPin = phoneUpdatePin.trim();
+
+    if (!normalizedPhoneNumber) {
+      setPhoneUpdateError(t("settings.phoneUpdate.requiredPhone") || "Bitte geben Sie eine neue Handynummer ein.");
+      return;
+    }
+    if (!/^\d{4}$/.test(normalizedPin)) {
+      setPhoneUpdateError(t("settings.phoneUpdate.requiredPin") || "Bitte geben Sie Ihre 4-stellige PIN ein.");
+      return;
+    }
+
+    setIsUpdatingPhone(true);
+    try {
+      const response = await apiService.updateEmployeePhone({
+        phoneNumber: normalizedPhoneNumber,
+        pin: normalizedPin,
+      });
+      if (!response.success) {
+        throw new Error(response.error || (t("settings.phoneUpdate.error") || "Handynummer konnte nicht geändert werden."));
+      }
+
+      setPhoneUpdateSuccess(
+        t("settings.phoneUpdate.success") || "Handynummer wurde erfolgreich aktualisiert.",
+      );
+      setPhoneUpdatePin("");
+      setNewPhoneNumber("");
+    } catch (updateError) {
+      setPhoneUpdateError(
+        updateError instanceof Error
+          ? updateError.message
+          : t("settings.phoneUpdate.error") || "Handynummer konnte nicht geändert werden.",
+      );
+    } finally {
+      setIsUpdatingPhone(false);
+    }
   };
 
   const availableLanguages = [
@@ -410,6 +458,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <button
                     onClick={() => {
                       setShowMenu(false);
+                      setPhoneUpdateError("");
+                      setPhoneUpdateSuccess("");
+                      setPhoneUpdatePin("");
+                      setNewPhoneNumber("");
+                      setShowPhoneUpdateModal(true);
+                    }}
+                    className="header-menu-action w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 font-medium transition-colors"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>{t("settings.phoneUpdate.action") || "Handynummer ändern"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
                       onLogout?.();
                     }}
                     className="header-menu-action w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 font-medium transition-colors"
@@ -663,8 +726,106 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </motion.button>
 
-        {/* Kontakt Modal */}
+        {/* Kontakt- und Profilmodale */}
         <AnimatePresence>
+          {showPhoneUpdateModal && (
+            <div
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+              onClick={() => setShowPhoneUpdateModal(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 border border-slate-200/80"
+              >
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center">
+                      <Phone className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {t("settings.phoneUpdate.title") || "Handynummer ändern"}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setShowPhoneUpdateModal(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100"
+                  >
+                    <X className="w-5 h-5 text-slate-600" />
+                  </button>
+                </div>
+
+                <div className="p-4 sm:p-6 space-y-4">
+                  <p className="text-sm text-slate-600">
+                    {t("settings.phoneUpdate.description") || "Aktualisieren Sie Ihre Handynummer, damit PIN-Zurücksetzen und die eindeutige Zuordnung weiterhin funktionieren."}
+                  </p>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("settings.phoneUpdate.newPhone") || "Neue Handynummer"}
+                    </span>
+                    <input
+                      type="tel"
+                      value={newPhoneNumber}
+                      onChange={(e) => setNewPhoneNumber(e.target.value)}
+                      className="input-field mt-2"
+                      placeholder={t("welcome.placeholders.phoneNumber") || "z. B. 0176 12345678"}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("settings.phoneUpdate.pin") || "Aktuelle PIN"}
+                    </span>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={phoneUpdatePin}
+                      onChange={(e) => setPhoneUpdatePin(e.target.value.replace(/\D+/g, "").slice(0, 4))}
+                      className="input-field mt-2"
+                      placeholder="••••"
+                    />
+                  </label>
+
+                  {phoneUpdateError && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {phoneUpdateError}
+                    </div>
+                  )}
+
+                  {phoneUpdateSuccess && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                      {phoneUpdateSuccess}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 px-4 sm:px-6 pb-4 sm:pb-6">
+                  <button
+                    onClick={() => setShowPhoneUpdateModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    {t("common.cancel") || "Abbrechen"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      void handleUpdatePhoneNumber();
+                    }}
+                    disabled={isUpdatingPhone}
+                    className="px-4 py-2 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingPhone
+                      ? t("settings.phoneUpdate.saving") || "Speichern..."
+                      : t("settings.phoneUpdate.save") || "Speichern"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
           {showContactModal && (
             <div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"

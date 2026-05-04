@@ -115,16 +115,29 @@ function AppContent() {
     }
 
     let isCancelled = false;
+    const employeeId = employeeSession.id;
     const employeeName = employeeSession.display_name.trim();
 
     const migrateEmployeeWeeks = async () => {
       try {
         apiService.resetEmployeeTimesheetSyncSupport();
         if (
-          migratedEmployeeWeeksRef.current === employeeName ||
-          storage.hasCompletedBackendTimesheetMigration(employeeName)
+          migratedEmployeeWeeksRef.current === String(employeeId) ||
+          storage.hasCompletedBackendTimesheetMigration(employeeId)
         ) {
-          migratedEmployeeWeeksRef.current = employeeName;
+          migratedEmployeeWeeksRef.current = String(employeeId);
+          return;
+        }
+
+        if (employeeSession.has_name_duplicates) {
+          migratedEmployeeWeeksRef.current = String(employeeId);
+          logger.warn("Skipped local timesheet migration because employee name is not unique", {
+            component: "App",
+            data: {
+              employeeId,
+              employeeName,
+            },
+          });
           return;
         }
 
@@ -144,8 +157,8 @@ function AppContent() {
           migratedCount += 1;
         }
 
-        storage.markBackendTimesheetMigrationComplete(employeeName);
-        migratedEmployeeWeeksRef.current = employeeName;
+        storage.markBackendTimesheetMigrationComplete(employeeId);
+        migratedEmployeeWeeksRef.current = String(employeeId);
 
         if (!isCancelled) {
           logger.info("Local timesheets migrated to backend", {
