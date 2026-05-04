@@ -1,8 +1,9 @@
 """
 Mitarbeiter-Authentifizierung:
-- Registrierung ueber Vorname/Nachname/Handynummer + PIN
-- Login ueber Vorname/Nachname + PIN
-- Session ueber HTTP-only Cookie
+- Registrierung über Vorname/Nachname/Handynummer + PIN
+- Login über Vorname/Nachname + PIN
+- bei Namensdopplern Login-Auflösung zusätzlich über Handynummer
+- Session über HTTP-only Cookie
 """
 import hashlib
 import os
@@ -37,6 +38,8 @@ EMPLOYEE_SESSION_COOKIE_MAX_AGE = int(
 class EmployeeAuthError(Exception):
     message: str
     status: int = 400
+    code: str | None = None
+    details: dict | None = None
 
 
 def normalize_person_name(value: str | None) -> str:
@@ -123,7 +126,7 @@ def get_employee_profile_from_request(request, customer_key: str) -> EmployeePro
     return session.employee_profile
 
 
-def _find_active_profiles_by_name(customer_key: str, first_name: str, last_name: str):
+def _find_active_profiles_by_name(customer_key: str, first_name: str, last_name: str) -> list[EmployeeProfile]:
     first_name_normalized = normalize_person_name(first_name)
     last_name_normalized = normalize_person_name(last_name)
     return list(
@@ -163,16 +166,6 @@ def register_employee_profile(
     if existing_by_phone:
         raise EmployeeAuthError('Für diese Handynummer existiert bereits ein Mitarbeiterkonto')
 
-    existing_by_name = _find_active_profiles_by_name(
-        customer_key=customer_key,
-        first_name=first_name_normalized,
-        last_name=last_name_normalized,
-    )
-    if existing_by_name:
-        raise EmployeeAuthError(
-            'Für diesen Namen existiert bereits ein Mitarbeiterkonto. Bitte PIN vergessen verwenden oder Support kontaktieren.'
-        )
-
     return EmployeeProfile.objects.create(
         customer_key=customer_key,
         first_name=first_name_normalized,
@@ -189,8 +182,10 @@ def login_employee_profile(
     first_name: str,
     last_name: str,
     pin: str,
+    phone_number: str | None = None,
 ) -> EmployeeProfile:
     pin_validated = validate_pin(pin)
+    phone_number_normalized = normalize_phone_number(phone_number)
     matches = _find_active_profiles_by_name(
         customer_key=customer_key,
         first_name=first_name,
@@ -198,13 +193,30 @@ def login_employee_profile(
     )
     if not matches:
         raise EmployeeAuthError('Mitarbeiterkonto nicht gefunden', status=401)
-    if len(matches) > 1:
-        raise EmployeeAuthError(
-            'Mehrere Mitarbeiter mit gleichem Namen gefunden. Bitte Support kontaktieren.',
-            status=409,
-        )
 
-    profile = matches[0]
+    if len(matches) > 1:
+        if not phone_number_normalized:
+            raise EmployeeAuthError(
+                'Es gibt mehrere Mitarbeiter mit diesem Namen. Bitte zusätzlich die Handynummer eingeben.',
+                status=409,
+                code='DUPLICATE_NAME',
+                details={'requiresPhoneNumber': True},
+            )
+
+        exact_matches = [profile for profile in matches if profile.phone_number == phone_number_normalized]
+        if len(exact_matches) != 1:
+            raise EmployeeAuthError(
+                'Die Handynummer konnte keinem eindeutigen Mitarbeiterkonto zugeordnet werden.',
+                status=409,
+                code='DUPLICATE_NAME',
+                details={'requiresPhoneNumber': True},
+            )
+        profile = exact_matches[0]
+    else:
+        profile = matches[0]
+        if phone_number_normalized and profile.phone_number != phone_number_normalized:
+            raise EmployeeAuthError('Handynummer passt nicht zum Mitarbeiterkonto', status=401)
+
     if not verify_pin(pin_validated, profile.pin_hash):
         raise EmployeeAuthError('Ungültige PIN', status=401)
 
@@ -233,12 +245,15 @@ def reset_employee_pin(
     )
     if not matches:
         raise EmployeeAuthError('Mitarbeiterkonto nicht gefunden', status=404)
+
     if len(matches) > 1:
         exact_matches = [profile for profile in matches if profile.phone_number == phone_number_normalized]
         if len(exact_matches) != 1:
             raise EmployeeAuthError(
-                'Mehrere Mitarbeiter mit gleichem Namen gefunden. Bitte Support kontaktieren.',
+                'Es gibt mehrere Mitarbeiter mit diesem Namen. Bitte die Handynummer prüfen.',
                 status=409,
+                code='DUPLICATE_NAME',
+                details={'requiresPhoneNumber': True},
             )
         profile = exact_matches[0]
     else:

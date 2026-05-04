@@ -28,6 +28,21 @@ interface ApiResponse<T> {
   data?: T;
   message?: string;
   error?: string;
+  code?: string;
+}
+
+class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  data?: unknown;
+
+  constructor(message: string, status: number, code?: string, data?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
 }
 
 interface LoginResponse {
@@ -321,8 +336,11 @@ class ApiService {
 
       // HTTP-Fehler prüfen
       if (!response.ok) {
-        throw new Error(
+        throw new ApiRequestError(
           data.error || `HTTP ${response.status}: ${response.statusText}`,
+          response.status,
+          data.code,
+          data.data,
         );
       }
 
@@ -536,6 +554,7 @@ class ApiService {
     firstName: string;
     lastName: string;
     pin: string;
+    phoneNumber?: string;
   }): Promise<ApiResponse<EmployeeAuthPayload>> {
     const response = await this.post<EmployeeAuthPayload>("/api/employee/login", payload);
     if (response.success && response.data?.csrf_token) {

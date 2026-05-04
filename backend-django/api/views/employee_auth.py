@@ -78,7 +78,7 @@ def employee_register(request):
             profile=profile,
         )
     except EmployeeAuthError as error:
-        return error_response(error.message, error.status)
+        return error_response(error.message, error.status, code=error.code, data=error.details)
 
     audit(
         'EMPLOYEE_REGISTER_SUCCESS',
@@ -104,6 +104,7 @@ def employee_login(request):
             first_name=body.get('firstName') or '',
             last_name=body.get('lastName') or '',
             pin=body.get('pin') or '',
+            phone_number=body.get('phoneNumber') or '',
         )
         migrated_count = migrate_legacy_device_timesheets_to_profile(
             request,
@@ -111,7 +112,7 @@ def employee_login(request):
             profile=profile,
         )
     except EmployeeAuthError as error:
-        return error_response(error.message, error.status)
+        return error_response(error.message, error.status, code=error.code, data=error.details)
 
     audit(
         'EMPLOYEE_LOGIN_SUCCESS',
@@ -145,7 +146,7 @@ def employee_reset_pin(request):
             profile=profile,
         )
     except EmployeeAuthError as error:
-        return error_response(error.message, error.status)
+        return error_response(error.message, error.status, code=error.code, data=error.details)
 
     audit(
         'EMPLOYEE_PIN_RESET',

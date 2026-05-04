@@ -51,6 +51,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const [pendingSession, setPendingSession] = useState<EmployeeSessionDto | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginNeedsPhoneNumber, setLoginNeedsPhoneNumber] = useState(false);
 
   const handleLanguageChange = (languageCode: string) => {
     setSelectedLanguage(languageCode);
@@ -65,7 +66,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
     if (!firstName.trim()) nextErrors.firstName = requiredMessage;
     if (!lastName.trim()) nextErrors.lastName = requiredMessage;
 
-    if (mode !== "login" && !phoneNumber.trim()) {
+    if ((mode !== "login" || loginNeedsPhoneNumber) && !phoneNumber.trim()) {
       nextErrors.phoneNumber = requiredMessage;
     }
 
@@ -141,11 +142,13 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           pin: pin.trim(),
+          phoneNumber: loginNeedsPhoneNumber ? phoneNumber.trim() : undefined,
         });
         const employee = response.data?.employee;
         if (!response.success || !employee) {
           throw new Error(response.error || "Anmeldung fehlgeschlagen");
         }
+        setLoginNeedsPhoneNumber(false);
         completeAuthentication(employee);
       } else {
         const response = await apiService.resetEmployeePin({
@@ -161,6 +164,15 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         completeAuthentication(employee);
       }
     } catch (submitErrorValue) {
+      const duplicateNameConflict =
+        submitErrorValue instanceof Error &&
+        "code" in submitErrorValue &&
+        (submitErrorValue as Error & { code?: string; data?: unknown }).code === "DUPLICATE_NAME";
+
+      if (duplicateNameConflict && mode === "login") {
+        setLoginNeedsPhoneNumber(true);
+      }
+
       setSubmitError(
         submitErrorValue instanceof Error
           ? submitErrorValue.message
@@ -194,7 +206,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
     mode === "register"
       ? "Beim ersten Mal bitte Name, Handynummer und PIN festlegen."
       : mode === "login"
-        ? "Bitte mit Vorname, Nachname und PIN anmelden."
+        ? loginNeedsPhoneNumber
+          ? "Für diesen Namen gibt es mehrere Mitarbeiter. Bitte zusätzlich die Handynummer eingeben."
+          : "Bitte mit Vorname, Nachname und PIN anmelden."
         : "Handynummer eingeben und eine neue PIN festlegen.";
 
   const submitLabel =
@@ -249,6 +263,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                       setMode(item.id as WelcomeMode);
                       setSubmitError("");
                       setErrors({});
+                      setLoginNeedsPhoneNumber(false);
                     }}
                     className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
                       mode === item.id
@@ -305,6 +320,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                         value={firstName}
                         onChange={(e) => {
                           setFirstName(e.target.value);
+                          if (mode === "login" && loginNeedsPhoneNumber) {
+                            setLoginNeedsPhoneNumber(false);
+                          }
                           if (errors.firstName) {
                             setErrors({ ...errors, firstName: undefined });
                           }
@@ -330,6 +348,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                         value={lastName}
                         onChange={(e) => {
                           setLastName(e.target.value);
+                          if (mode === "login" && loginNeedsPhoneNumber) {
+                            setLoginNeedsPhoneNumber(false);
+                          }
                           if (errors.lastName) {
                             setErrors({ ...errors, lastName: undefined });
                           }
@@ -346,7 +367,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                   </div>
                 </motion.div>
 
-                {mode !== "login" && (
+                {(mode !== "login" || loginNeedsPhoneNumber) && (
                   <div>
                     <label className="block mb-2">
                       <span className="text-slate-700 font-medium">
@@ -373,7 +394,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                   </div>
                 )}
 
-                <div className={mode === "login" ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
+                <div className={mode === "login" && !loginNeedsPhoneNumber ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
                   <div>
                     <label className="block mb-2">
                       <span className="text-slate-700 font-medium">
