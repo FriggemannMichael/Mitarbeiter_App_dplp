@@ -225,7 +225,42 @@ def register_employee_profile(
         .first()
     )
     if existing_by_phone:
-        raise EmployeeAuthError('Für diese Handynummer existiert bereits ein Mitarbeiterkonto')
+        same_name = (
+            existing_by_phone.first_name.lower() == first_name_normalized.lower()
+            and existing_by_phone.last_name.lower() == last_name_normalized.lower()
+        )
+        raise EmployeeAuthError(
+            (
+                'Für diesen Mitarbeiter existiert bereits ein Konto. '
+                'Bitte melden Sie sich an oder setzen Sie die PIN zurück.'
+            )
+            if same_name
+            else 'Für diese Handynummer existiert bereits ein anderes Mitarbeiterkonto.',
+            status=409,
+            code='ACCOUNT_ALREADY_EXISTS' if same_name else 'PHONE_NUMBER_IN_USE',
+            details={
+                'suggestedMode': 'login' if same_name else 'register',
+                'canResetPin': same_name,
+                'requiresPhoneNumber': True,
+            },
+        )
+
+    existing_same_name = _find_active_profiles_by_name(
+        customer_key=customer_key,
+        first_name=first_name_normalized,
+        last_name=last_name_normalized,
+    )
+    if len(existing_same_name) == 1 and existing_same_name[0].phone_number == phone_number_normalized:
+        raise EmployeeAuthError(
+            'Für diesen Mitarbeiter existiert bereits ein Konto. Bitte melden Sie sich an oder setzen Sie die PIN zurück.',
+            status=409,
+            code='ACCOUNT_ALREADY_EXISTS',
+            details={
+                'suggestedMode': 'login',
+                'canResetPin': True,
+                'requiresPhoneNumber': True,
+            },
+        )
 
     return EmployeeProfile.objects.create(
         customer_key=customer_key,

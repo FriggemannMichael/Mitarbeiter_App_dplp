@@ -17,6 +17,10 @@ interface WelcomeProps {
 }
 
 type WelcomeMode = "register" | "login" | "resetPin";
+type ConflictActionState = {
+  suggestedMode?: WelcomeMode;
+  canResetPin?: boolean;
+} | null;
 
 const languages = [
   { code: "de", name: "Deutsch", flag: "🇩🇪" },
@@ -53,6 +57,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginNeedsPhoneNumber, setLoginNeedsPhoneNumber] = useState(false);
+  const [conflictAction, setConflictAction] = useState<ConflictActionState>(null);
 
   const handleLanguageChange = (languageCode: string) => {
     setSelectedLanguage(languageCode);
@@ -87,6 +92,11 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
     return Object.keys(nextErrors).length === 0;
   };
 
+  const resetSubmitState = () => {
+    setSubmitError("");
+    setConflictAction(null);
+  };
+
   const completeAuthentication = (session: EmployeeSessionDto) => {
     storage.setEmployeeName(session.display_name);
     if (mode === "register") {
@@ -117,7 +127,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSubmitError("");
+    resetSubmitState();
 
     if (!validateForm()) {
       return;
@@ -165,13 +175,33 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         completeAuthentication(employee);
       }
     } catch (submitErrorValue) {
-      const duplicateNameConflict =
-        submitErrorValue instanceof Error &&
-        "code" in submitErrorValue &&
-        (submitErrorValue as Error & { code?: string; data?: unknown }).code === "DUPLICATE_NAME";
+      const errorCode =
+        submitErrorValue instanceof Error && "code" in submitErrorValue
+          ? (submitErrorValue as Error & { code?: string }).code
+          : undefined;
+      const errorData =
+        submitErrorValue instanceof Error && "data" in submitErrorValue
+          ? (submitErrorValue as Error & { data?: unknown }).data
+          : undefined;
 
-      if (duplicateNameConflict && mode === "login") {
+      if (errorCode === "DUPLICATE_NAME" && mode === "login") {
         setLoginNeedsPhoneNumber(true);
+      }
+
+      if (errorCode === "ACCOUNT_ALREADY_EXISTS") {
+        const details =
+          errorData && typeof errorData === "object"
+            ? (errorData as {
+                suggestedMode?: WelcomeMode;
+                canResetPin?: boolean;
+              })
+            : undefined;
+        setConflictAction({
+          suggestedMode: details?.suggestedMode || "login",
+          canResetPin: details?.canResetPin ?? true,
+        });
+      } else {
+        setConflictAction(null);
       }
 
       setSubmitError(
@@ -258,14 +288,14 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                   { id: "resetPin", label: t("welcome.mode.resetPin") || "PIN vergessen" },
                 ].map((item) => (
                   <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setMode(item.id as WelcomeMode);
-                      setSubmitError("");
-                      setErrors({});
-                      setLoginNeedsPhoneNumber(false);
-                    }}
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setMode(item.id as WelcomeMode);
+                        resetSubmitState();
+                        setErrors({});
+                        setLoginNeedsPhoneNumber(false);
+                      }}
                     className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
                       mode === item.id
                         ? "bg-white text-slate-900 shadow-sm"
@@ -538,6 +568,45 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                 {submitError && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     {submitError}
+                  </div>
+                )}
+
+                {conflictAction && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 space-y-3">
+                    <p className="font-medium">
+                      Dieses Konto ist bereits vorhanden. Bitte melden Sie sich
+                      an oder setzen Sie Ihre PIN zurück.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode(conflictAction.suggestedMode || "login");
+                          setLoginNeedsPhoneNumber(false);
+                          resetSubmitState();
+                          setPin("");
+                          setPinRepeat("");
+                        }}
+                        className="rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+                      >
+                        {t("welcome.submit.login") || "Anmelden"}
+                      </button>
+                      {conflictAction.canResetPin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("resetPin");
+                            setLoginNeedsPhoneNumber(false);
+                            resetSubmitState();
+                            setPin("");
+                            setPinRepeat("");
+                          }}
+                          className="rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+                        >
+                          {t("welcome.submit.resetPin") || "PIN zurücksetzen"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
