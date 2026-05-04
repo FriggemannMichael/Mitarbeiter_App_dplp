@@ -14,7 +14,8 @@ from datetime import timedelta
 import bcrypt
 from django.utils import timezone
 
-from api.models import EmployeeProfile, EmployeeSession
+from api.models import EmployeeProfile, EmployeeSession, Timesheet
+from api.services.employee_device_service import get_employee_device_from_request
 
 
 EMPLOYEE_SESSION_COOKIE_NAME = os.environ.get('EMPLOYEE_SESSION_COOKIE_NAME', 'employee_session')
@@ -282,6 +283,85 @@ def serialize_employee_profile(profile: EmployeeProfile) -> dict:
         'customer_key': profile.customer_key,
         'last_login_at': profile.last_login_at.isoformat() if profile.last_login_at else None,
     }
+
+
+def _merge_week_data_for_profile(profile: EmployeeProfile, week_data: dict | None) -> dict:
+    merged_week_data = dict(week_data or {})
+    merged_week_data['employeeName'] = profile.display_name or build_display_name(
+        profile.first_name,
+        profile.last_name,
+    )
+    return merged_week_data
+
+
+def migrate_legacy_device_timesheets_to_profile(
+    request,
+    *,
+    customer_key: str,
+    profile: EmployeeProfile,
+) -> int:
+    legacy_device = get_employee_device_from_request(request, customer_key)
+    if not legacy_device:
+        return 0
+
+    legacy_timesheets = list(
+        Timesheet.objects.filter(
+            customer_key=customer_key,
+            employee_device=legacy_device,
+        ).order_by('created_at', 'id')
+    )
+    if not legacy_timesheets:
+        return 0
+
+    migrated_count = 0
+    for legacy_timesheet in legacy_timesheets:
+        existing_profile_timesheet = (
+            Timesheet.objects.filter(
+                customer_key=customer_key,
+                employee_profile=profile,
+                week_year=legacy_timesheet.week_year,
+                week_number=legacy_timesheet.week_number,
+                sheet_id=legacy_timesheet.sheet_id,
+            )
+            .order_by('-updated_at', '-id')
+            .first()
+        )
+
+        normalized_week_data = _merge_week_data_for_profile(profile, legacy_timesheet.week_data)
+
+        if existing_profile_timesheet:
+            if legacy_timesheet.updated_at >= existing_profile_timesheet.updated_at:
+                existing_profile_timesheet.week_data = normalized_week_data
+                existing_profile_timesheet.archived_at = legacy_timesheet.archived_at
+                existing_profile_timesheet.archived_reason = legacy_timesheet.archived_reason
+                existing_profile_timesheet.user_id = legacy_timesheet.user_id
+                existing_profile_timesheet.save(
+                    update_fields=[
+                        'week_data',
+                        'archived_at',
+                        'archived_reason',
+                        'user_id',
+                        'updated_at',
+                    ]
+                )
+            legacy_timesheet.delete()
+            migrated_count += 1
+            continue
+
+        legacy_timesheet.employee_profile = profile
+        legacy_timesheet.employee_device = None
+        legacy_timesheet.week_data = normalized_week_data
+        legacy_timesheet.save(
+            update_fields=[
+                'employee_profile',
+                'employee_device',
+                'week_data',
+                'updated_at',
+            ]
+        )
+        migrated_count += 1
+
+    return migrated_count
 
 
 def set_employee_session_cookie(response, token: str):

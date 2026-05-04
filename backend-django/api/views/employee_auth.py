@@ -20,6 +20,7 @@ from api.services.employee_auth_service import (
     get_employee_profile_from_request,
     invalidate_employee_session,
     login_employee_profile,
+    migrate_legacy_device_timesheets_to_profile,
     register_employee_profile,
     reset_employee_pin,
     serialize_employee_profile,
@@ -71,6 +72,11 @@ def employee_register(request):
             phone_number=body.get('phoneNumber') or '',
             pin=body.get('pin') or '',
         )
+        migrated_count = migrate_legacy_device_timesheets_to_profile(
+            request,
+            customer_key=customer_key,
+            profile=profile,
+        )
     except EmployeeAuthError as error:
         return error_response(error.message, error.status)
 
@@ -79,6 +85,7 @@ def employee_register(request):
         {
             'employeeProfileId': profile.id,
             'displayName': profile.display_name,
+            'migratedLegacyTimesheets': migrated_count,
         },
         get_client_ip(request),
         customer_key=profile.customer_key,
@@ -98,6 +105,11 @@ def employee_login(request):
             last_name=body.get('lastName') or '',
             pin=body.get('pin') or '',
         )
+        migrated_count = migrate_legacy_device_timesheets_to_profile(
+            request,
+            customer_key=customer_key,
+            profile=profile,
+        )
     except EmployeeAuthError as error:
         return error_response(error.message, error.status)
 
@@ -106,6 +118,7 @@ def employee_login(request):
         {
             'employeeProfileId': profile.id,
             'displayName': profile.display_name,
+            'migratedLegacyTimesheets': migrated_count,
         },
         get_client_ip(request),
         customer_key=profile.customer_key,
@@ -126,6 +139,11 @@ def employee_reset_pin(request):
             phone_number=body.get('phoneNumber') or '',
             pin=body.get('pin') or '',
         )
+        migrated_count = migrate_legacy_device_timesheets_to_profile(
+            request,
+            customer_key=customer_key,
+            profile=profile,
+        )
     except EmployeeAuthError as error:
         return error_response(error.message, error.status)
 
@@ -134,6 +152,7 @@ def employee_reset_pin(request):
         {
             'employeeProfileId': profile.id,
             'displayName': profile.display_name,
+            'migratedLegacyTimesheets': migrated_count,
         },
         get_client_ip(request),
         customer_key=profile.customer_key,
