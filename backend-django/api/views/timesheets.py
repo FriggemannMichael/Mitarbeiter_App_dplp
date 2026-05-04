@@ -13,8 +13,6 @@ from api.models import Timesheet
 from api.helpers import success_response, error_response, unauthorized_response
 from api.services.employee_auth_service import get_employee_profile_from_request
 from api.services.employee_device_service import (
-    get_employee_device_from_request,
-    touch_employee_device,
     validate_employee_csrf,
 )
 from api.services.tenant_service import get_employee_request_customer_key
@@ -48,15 +46,13 @@ def _serialize_timesheet(timesheet: Timesheet) -> dict:
     }
 
 
-def _get_active_timesheet_queryset(customer_key, *, employee_profile=None, device=None):
+def _get_active_timesheet_queryset(customer_key, *, employee_profile=None):
     filters = {
         'customer_key': customer_key,
         'archived_at__isnull': True,
     }
     if employee_profile is not None:
         filters['employee_profile'] = employee_profile
-    elif device is not None:
-        filters['employee_device'] = device
     else:
         return Timesheet.objects.none()
 
@@ -81,8 +77,7 @@ def save_timesheet(request):
 
     customer_key = get_employee_request_customer_key(request)
     employee_profile = get_employee_profile_from_request(request, customer_key)
-    device = None if employee_profile else get_employee_device_from_request(request, customer_key)
-    if not employee_profile and not device:
+    if not employee_profile:
         return unauthorized_response('Mitarbeiter nicht angemeldet')
 
     week_year, week_number, sheet_id = _resolve_week_identity(body, week_data)
@@ -94,37 +89,21 @@ def save_timesheet(request):
         or week_data.get('employeeName')
         or ''
     )
-    if employee_profile is not None:
-        week_data['employeeName'] = employee_profile.display_name or display_name or week_data.get('employeeName') or ''
-        timesheet, _ = Timesheet.objects.update_or_create(
-            customer_key=customer_key,
-            employee_profile=employee_profile,
-            week_year=week_year,
-            week_number=week_number,
-            sheet_id=sheet_id,
-            defaults={
-                'user_id': 1,
-                'employee_device': None,
-                'week_data': week_data,
-                'archived_at': None,
-                'archived_reason': '',
-            }
-        )
-    else:
-        touch_employee_device(device, display_name=str(display_name))
-        timesheet, _ = Timesheet.objects.update_or_create(
-            customer_key=customer_key,
-            employee_device=device,
-            week_year=week_year,
-            week_number=week_number,
-            sheet_id=sheet_id,
-            defaults={
-                'user_id': 1,
-                'week_data': week_data,
-                'archived_at': None,
-                'archived_reason': '',
-            }
-        )
+    week_data['employeeName'] = employee_profile.display_name or display_name or week_data.get('employeeName') or ''
+    timesheet, _ = Timesheet.objects.update_or_create(
+        customer_key=customer_key,
+        employee_profile=employee_profile,
+        week_year=week_year,
+        week_number=week_number,
+        sheet_id=sheet_id,
+        defaults={
+            'user_id': 1,
+            'employee_device': None,
+            'week_data': week_data,
+            'archived_at': None,
+            'archived_reason': '',
+        }
+    )
     return success_response({
         'id': timesheet.id,
         'week_year': week_year,
@@ -137,11 +116,8 @@ def save_timesheet(request):
 def get_timesheet(request):
     customer_key = get_employee_request_customer_key(request)
     employee_profile = get_employee_profile_from_request(request, customer_key)
-    device = None if employee_profile else get_employee_device_from_request(request, customer_key)
-    if not employee_profile and not device:
+    if not employee_profile:
         return unauthorized_response('Mitarbeiter nicht angemeldet')
-    if device is not None:
-        touch_employee_device(device)
 
     week_year = _normalize_int(request.GET.get('year'))
     week_number = _normalize_int(request.GET.get('week'))
@@ -150,7 +126,6 @@ def get_timesheet(request):
     queryset = _get_active_timesheet_queryset(
         customer_key,
         employee_profile=employee_profile,
-        device=device,
     ).order_by('-updated_at', '-id')
 
     if week_year is not None and week_number is not None:
@@ -170,11 +145,8 @@ def get_timesheet(request):
 def list_timesheets(request):
     customer_key = get_employee_request_customer_key(request)
     employee_profile = get_employee_profile_from_request(request, customer_key)
-    device = None if employee_profile else get_employee_device_from_request(request, customer_key)
-    if not employee_profile and not device:
+    if not employee_profile:
         return unauthorized_response('Mitarbeiter nicht angemeldet')
-    if device is not None:
-        touch_employee_device(device)
 
     week_year = _normalize_int(request.GET.get('year'))
     week_number = _normalize_int(request.GET.get('week'))
@@ -183,7 +155,6 @@ def list_timesheets(request):
     queryset = _get_active_timesheet_queryset(
         customer_key,
         employee_profile=employee_profile,
-        device=device,
     ).order_by(
         '-week_year',
         '-week_number',
@@ -215,8 +186,7 @@ def archive_timesheet(request):
 
     customer_key = get_employee_request_customer_key(request)
     employee_profile = get_employee_profile_from_request(request, customer_key)
-    device = None if employee_profile else get_employee_device_from_request(request, customer_key)
-    if not employee_profile and not device:
+    if not employee_profile:
         return unauthorized_response('Mitarbeiter nicht angemeldet')
 
     week_year = _normalize_int(body.get('year'))
@@ -226,14 +196,10 @@ def archive_timesheet(request):
     if week_year is None or week_number is None:
         return error_response('year and week required', 400)
 
-    if device is not None:
-        touch_employee_device(device)
-
     timesheet = (
         _get_active_timesheet_queryset(
             customer_key,
             employee_profile=employee_profile,
-            device=device,
         )
         .filter(
             week_year=week_year,

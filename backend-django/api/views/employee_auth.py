@@ -34,6 +34,7 @@ from api.services.employee_auth_service import (
 )
 from api.services.employee_device_service import (
     create_employee_csrf_token,
+    delete_employee_device_cookie,
     delete_employee_csrf_cookie,
     set_employee_csrf_cookie,
 )
@@ -62,6 +63,7 @@ def _build_auth_response(profile, *, created: bool = False):
     })
     set_employee_session_cookie(response, session_token)
     set_employee_csrf_cookie(response, csrf_token)
+    delete_employee_device_cookie(response)
     return response
 
 
@@ -233,6 +235,7 @@ def employee_logout(request):
     invalidate_employee_session(request, customer_key)
     response = success_response(None)
     delete_employee_session_cookie(response)
+    delete_employee_device_cookie(response)
     delete_employee_csrf_cookie(response)
     return response
 

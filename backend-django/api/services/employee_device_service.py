@@ -103,6 +103,14 @@ def set_employee_device_cookie(response, token: str):
     )
 
 
+def delete_employee_device_cookie(response):
+    response.delete_cookie(
+        key=EMPLOYEE_DEVICE_COOKIE_NAME,
+        samesite=EMPLOYEE_DEVICE_COOKIE_SAMESITE,
+        path='/',
+    )
+
+
 def set_employee_csrf_cookie(response, token: str):
     response.set_cookie(
         key=EMPLOYEE_CSRF_COOKIE_NAME,

@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from api.helpers import error_response, success_response
-from api.models import AuditLog, EmployeeDevice, Timesheet
+from api.models import AuditLog, EmployeeProfile, Timesheet
 from api.services.auth_service import (
     ROLE_BACKOFFICE,
     ROLE_BRANCH_MANAGER,
@@ -71,22 +71,24 @@ def _parse_int(value):
 
 
 def _extract_employee_name(timesheet: Timesheet) -> str:
+    if timesheet.employee_profile and timesheet.employee_profile.display_name:
+        return timesheet.employee_profile.display_name.strip()
     week_data = timesheet.week_data or {}
     employee_name = (week_data.get("employeeName") or "").strip()
     if employee_name:
         return employee_name
-    if timesheet.employee_profile and timesheet.employee_profile.display_name:
-        return timesheet.employee_profile.display_name.strip()
     if timesheet.employee_device and timesheet.employee_device.display_name:
         return timesheet.employee_device.display_name.strip()
-    return f"Mitarbeiter #{timesheet.employee_device_id or timesheet.id}"
+    return f"Mitarbeiter #{timesheet.employee_profile_id or timesheet.employee_device_id or timesheet.id}"
 
 
 def _employee_name_key(value: str) -> str:
     return " ".join((value or "").strip().lower().split())
 
 
-def _employee_identity_key(device_id, name: str) -> str:
+def _employee_identity_key(profile_id, device_id, name: str) -> str:
+    if profile_id:
+        return f"profile:{profile_id}"
     if device_id:
         return f"device:{device_id}"
     return f"name:{_employee_name_key(name)}"
@@ -244,29 +246,33 @@ def _get_timesheet_queryset(customer_key: str):
 
 def _get_known_employees(customer_key: str, timesheets: list[Timesheet]) -> list[dict]:
     employees_by_key: dict[str, dict] = {}
-    for device in EmployeeDevice.objects.filter(
+    for profile in EmployeeProfile.objects.filter(
         customer_key=customer_key,
         is_active=True,
     ).exclude(display_name=""):
-        value = (device.display_name or "").strip()
+        value = (profile.display_name or "").strip()
         if value:
-            key = _employee_identity_key(device.id, value)
+            key = _employee_identity_key(profile.id, None, value)
             if key and key not in employees_by_key:
                 employees_by_key[key] = {
                     "key": key,
                     "name": value,
-                    "device_id": device.id,
+                    "profile_id": profile.id,
                 }
 
     for timesheet in timesheets:
         value = _extract_employee_name(timesheet).strip()
         if value:
-            key = _employee_identity_key(timesheet.employee_device_id, value)
+            key = _employee_identity_key(
+                timesheet.employee_profile_id,
+                timesheet.employee_device_id,
+                value,
+            )
             if key and key not in employees_by_key:
                 employees_by_key[key] = {
                     "key": key,
                     "name": value,
-                    "device_id": timesheet.employee_device_id,
+                    "profile_id": timesheet.employee_profile_id,
                 }
 
     return sorted(employees_by_key.values(), key=lambda value: value["name"].lower())
@@ -275,7 +281,11 @@ def _get_known_employees(customer_key: str, timesheets: list[Timesheet]) -> list
 def _build_missing_employees(known_employees: list[dict], timesheets: list[Timesheet]) -> list[str]:
     current_year, current_week = _current_week_identity()
     present_employee_keys = {
-        _employee_identity_key(timesheet.employee_device_id, _extract_employee_name(timesheet))
+        _employee_identity_key(
+            timesheet.employee_profile_id,
+            timesheet.employee_device_id,
+            _extract_employee_name(timesheet),
+        )
         for timesheet in timesheets
         if timesheet.week_year == current_year and timesheet.week_number == current_week
     }
@@ -356,7 +366,11 @@ def portal_employees(request):
 
     for timesheet in queryset:
         employee_name = _extract_employee_name(timesheet)
-        employee_key = _employee_identity_key(timesheet.employee_device_id, employee_name)
+        employee_key = _employee_identity_key(
+            timesheet.employee_profile_id,
+            timesheet.employee_device_id,
+            employee_name,
+        )
         days = (timesheet.week_data or {}).get("days") or []
         item = by_employee.setdefault(employee_key, {
             "employee_name": employee_name,

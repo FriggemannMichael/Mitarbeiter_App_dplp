@@ -507,6 +507,106 @@ def migrate_legacy_device_timesheets_to_profile(
     return migrated_count
 
 
+def cleanup_legacy_device_timesheets(customer_key: str | None = None) -> dict:
+    queryset = (
+        Timesheet.objects
+        .filter(
+            employee_profile__isnull=True,
+            employee_device__isnull=False,
+        )
+        .select_related('employee_device')
+        .order_by('customer_key', 'created_at', 'id')
+    )
+    if customer_key:
+        queryset = queryset.filter(customer_key=customer_key)
+
+    migrated_count = 0
+    merged_count = 0
+    unresolved_missing_profile = 0
+    unresolved_duplicate_name = 0
+
+    for legacy_timesheet in queryset:
+        week_data = legacy_timesheet.week_data or {}
+        employee_name = normalize_person_name(
+            week_data.get('employeeName') or legacy_timesheet.employee_device.display_name
+        )
+        if not employee_name:
+            unresolved_missing_profile += 1
+            continue
+
+        parts = employee_name.split(' ', 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ''
+        if not first_name or not last_name:
+            unresolved_missing_profile += 1
+            continue
+
+        matches = _find_active_profiles_by_name(
+            legacy_timesheet.customer_key,
+            first_name,
+            last_name,
+        )
+        if not matches:
+            unresolved_missing_profile += 1
+            continue
+        if len(matches) > 1:
+            unresolved_duplicate_name += 1
+            continue
+
+        profile = matches[0]
+        normalized_week_data = _merge_week_data_for_profile(profile, week_data)
+        existing_profile_timesheet = (
+            Timesheet.objects.filter(
+                customer_key=legacy_timesheet.customer_key,
+                employee_profile=profile,
+                week_year=legacy_timesheet.week_year,
+                week_number=legacy_timesheet.week_number,
+                sheet_id=legacy_timesheet.sheet_id,
+            )
+            .order_by('-updated_at', '-id')
+            .first()
+        )
+
+        if existing_profile_timesheet:
+            if legacy_timesheet.updated_at >= existing_profile_timesheet.updated_at:
+                existing_profile_timesheet.week_data = normalized_week_data
+                existing_profile_timesheet.archived_at = legacy_timesheet.archived_at
+                existing_profile_timesheet.archived_reason = legacy_timesheet.archived_reason
+                existing_profile_timesheet.user_id = legacy_timesheet.user_id
+                existing_profile_timesheet.save(
+                    update_fields=[
+                        'week_data',
+                        'archived_at',
+                        'archived_reason',
+                        'user_id',
+                        'updated_at',
+                    ]
+                )
+            legacy_timesheet.delete()
+            merged_count += 1
+            continue
+
+        legacy_timesheet.employee_profile = profile
+        legacy_timesheet.employee_device = None
+        legacy_timesheet.week_data = normalized_week_data
+        legacy_timesheet.save(
+            update_fields=[
+                'employee_profile',
+                'employee_device',
+                'week_data',
+                'updated_at',
+            ]
+        )
+        migrated_count += 1
+
+    return {
+        'migrated_count': migrated_count,
+        'merged_count': merged_count,
+        'unresolved_missing_profile': unresolved_missing_profile,
+        'unresolved_duplicate_name': unresolved_duplicate_name,
+    }
+
+
 def set_employee_session_cookie(response, token: str):
     response.set_cookie(
         key=EMPLOYEE_SESSION_COOKIE_NAME,
