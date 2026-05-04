@@ -145,6 +145,22 @@ interface InitEmployeeDevicePayload {
   csrf_token?: string;
 }
 
+export interface EmployeeSessionDto {
+  id: number;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  phone_number: string;
+  customer_key: string;
+  last_login_at?: string | null;
+}
+
+interface EmployeeAuthPayload {
+  employee: EmployeeSessionDto;
+  created?: boolean;
+  csrf_token?: string;
+}
+
 export interface TimesheetApiPayload<TWeekData = unknown> {
   id: number;
   week_year?: number | null;
@@ -501,6 +517,53 @@ class ApiService {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
     return response;
+  }
+
+  async registerEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/register", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async loginEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/login", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async resetEmployeePin(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/reset-pin", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async logoutEmployee(): Promise<ApiResponse<null>> {
+    this.setEmployeeCsrfToken("");
+    return this.post<null>("/api/employee/logout", {});
+  }
+
+  async getEmployeeSession(): Promise<ApiResponse<{ employee: EmployeeSessionDto }>> {
+    return this.get<{ employee: EmployeeSessionDto }>("/api/employee/session");
   }
 
   async saveTimesheet<TWeekData>(payload: {

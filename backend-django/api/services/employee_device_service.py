@@ -115,6 +115,14 @@ def set_employee_csrf_cookie(response, token: str):
     )
 
 
+def delete_employee_csrf_cookie(response):
+    response.delete_cookie(
+        key=EMPLOYEE_CSRF_COOKIE_NAME,
+        samesite=EMPLOYEE_DEVICE_COOKIE_SAMESITE,
+        path='/',
+    )
+
+
 def validate_employee_csrf(request) -> bool:
     cookie_token = get_employee_csrf_token_from_request(request)
     header_token = (request.headers.get(EMPLOYEE_CSRF_HEADER_NAME, '') or '').strip()

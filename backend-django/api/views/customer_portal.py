@@ -75,6 +75,8 @@ def _extract_employee_name(timesheet: Timesheet) -> str:
     employee_name = (week_data.get("employeeName") or "").strip()
     if employee_name:
         return employee_name
+    if timesheet.employee_profile and timesheet.employee_profile.display_name:
+        return timesheet.employee_profile.display_name.strip()
     if timesheet.employee_device and timesheet.employee_device.display_name:
         return timesheet.employee_device.display_name.strip()
     return f"Mitarbeiter #{timesheet.employee_device_id or timesheet.id}"
@@ -235,7 +237,7 @@ def _get_timesheet_queryset(customer_key: str):
     return (
         Timesheet.objects
         .filter(customer_key=customer_key, archived_at__isnull=True)
-        .select_related("employee_device")
+        .select_related("employee_device", "employee_profile")
         .order_by("-week_year", "-week_number", "sheet_id", "-updated_at", "-id")
     )
 

@@ -1,6 +1,13 @@
 from django.urls import path
 from api.views.health import health
 from api.views.auth import login, logout, me
+from api.views.employee_auth import (
+    employee_login,
+    employee_logout,
+    employee_register,
+    employee_reset_pin,
+    employee_session,
+)
 from api.views.config import app_config, admin_config, save_admin_config, change_password
 from api.views.accounts import list_accounts, create_account, update_account
 from api.views.employee_device import init_employee_device
@@ -39,6 +46,11 @@ urlpatterns = [
     path('api/accounts/create', create_account),
     path('api/accounts/<int:account_id>', update_account),
     path('api/employee-device/init', init_employee_device),
+    path('api/employee/register', employee_register),
+    path('api/employee/login', employee_login),
+    path('api/employee/logout', employee_logout),
+    path('api/employee/session', employee_session),
+    path('api/employee/reset-pin', employee_reset_pin),
 
     # User
     path('api/save-user', save_user),

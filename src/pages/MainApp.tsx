@@ -6,7 +6,6 @@ import { VacationRequestHybrid } from "./VacationRequestHybrid";
 import { AdvancePaymentHybrid } from "./AdvancePaymentHybrid";
 import { useTimesheetActions } from "../contexts/TimesheetActionsContext";
 import { useConfig } from "../contexts/ConfigContext";
-import { storage } from "../utils/storage";
 import { isFeatureEnabled } from "../utils/featureFlags";
 import { logger } from "../services/logger";
 import { Home, ClipboardList, Plus, Palmtree, Euro } from "lucide-react";
@@ -14,10 +13,11 @@ import { Home, ClipboardList, Plus, Palmtree, Euro } from "lucide-react";
 type TabType = "dashboard" | "timesheet" | "vacation" | "advancePayment";
 
 interface MainAppProps {
+  employeeName: string;
   onLogout: () => void;
 }
 
-export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
+export const MainApp: React.FC<MainAppProps> = ({ employeeName, onLogout }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [selectedWeek, setSelectedWeek] = useState<{
@@ -26,7 +26,6 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
     sheetId?: number;
   } | null>(null);
 
-  const employeeName = storage.getEmployeeName();
   const { createNewSheet } = useTimesheetActions();
   const { config } = useConfig();
   const vacationEnabled = isFeatureEnabled(

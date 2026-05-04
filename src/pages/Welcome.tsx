@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { APP_VERSION } from "../version";
 import { useTranslation } from "react-i18next";
 import { Shield, Globe, ChevronDown } from "lucide-react";
@@ -7,10 +7,16 @@ import { storage } from "../utils/storage";
 import { PWAInstallGuide } from "../components/PWAInstallGuide";
 import { useCompanyConfig, usePdfConfig } from "../contexts/ConfigContext";
 import { useConfig } from "../contexts/ConfigContext";
+import {
+  apiService,
+  type EmployeeSessionDto,
+} from "../services/apiService";
 
 interface WelcomeProps {
-  onComplete: () => void;
+  onAuthenticated: (session: EmployeeSessionDto) => void;
 }
+
+type WelcomeMode = "register" | "login" | "resetPin";
 
 const languages = [
   { code: "de", name: "Deutsch", flag: "🇩🇪" },
@@ -25,111 +31,178 @@ const languages = [
   { code: "fa", name: "فارسی", flag: "🇮🇷" },
 ];
 
-export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
+export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const { t, i18n } = useTranslation();
   const companyConfig = useCompanyConfig();
   const pdfConfig = usePdfConfig();
   const { config } = useConfig();
   const defaultLogoSrc = `${import.meta.env.BASE_URL}customers/DPL%20Logo.svg`;
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
+  const [mode, setMode] = useState<WelcomeMode>("register");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinRepeat, setPinRepeat] = useState("");
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [consent, setConsent] = useState(false);
-  const [errors, setErrors] = useState<{
-    firstName?: string;
-    lastName?: string;
-    consent?: string;
-  }>({});
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [showPWAGuide, setShowPWAGuide] = useState(false);
+  const [pendingSession, setPendingSession] = useState<EmployeeSessionDto | null>(null);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sprache ändern
   const handleLanguageChange = (languageCode: string) => {
     setSelectedLanguage(languageCode);
     i18n.changeLanguage(languageCode);
     storage.setLanguage(languageCode);
   };
 
-  // Form validieren
   const validateForm = () => {
-    const newErrors: typeof errors = {};
+    const nextErrors: Record<string, string | undefined> = {};
+    const requiredMessage = t("validation.required") || "Pflichtfeld";
 
-    if (!firstName.trim()) {
-      newErrors.firstName = t("validation.required");
+    if (!firstName.trim()) nextErrors.firstName = requiredMessage;
+    if (!lastName.trim()) nextErrors.lastName = requiredMessage;
+
+    if (mode !== "login" && !phoneNumber.trim()) {
+      nextErrors.phoneNumber = requiredMessage;
     }
 
-    if (!lastName.trim()) {
-      newErrors.lastName = t("validation.required");
+    if (!/^\d{4}$/.test(pin.trim())) {
+      nextErrors.pin = "PIN muss genau 4 Ziffern haben";
     }
 
-    if (!consent) {
-      newErrors.consent = t("validation.required");
+    if (mode !== "login" && pin.trim() !== pinRepeat.trim()) {
+      nextErrors.pinRepeat = "PIN-Wiederholung stimmt nicht überein";
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (mode === "register" && !consent) {
+      nextErrors.consent = requiredMessage;
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  // Form absenden
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (validateForm()) {
-      // Support tests which type a full name into the firstName field
-      let finalFirst = firstName.trim();
-      let finalLast = lastName.trim();
-
-      if (!finalLast && finalFirst.includes(" ")) {
-        const parts = finalFirst.split(/\s+/);
-        finalFirst = parts.shift() || "";
-        finalLast = parts.join(" ");
-        setFirstName(finalFirst);
-        setLastName(finalLast);
-      }
-
-      const fullName = `${finalFirst} ${finalLast}`.trim();
-      storage.setEmployeeName(fullName);
+  const completeAuthentication = (session: EmployeeSessionDto) => {
+    storage.setEmployeeName(session.display_name);
+    if (mode === "register") {
       storage.setConsent(true);
+    }
 
-      // In Test-Mode: don't show PWA guide, complete onboarding immediately
-      const isTestMode =
-        typeof process !== "undefined" &&
-        (process.env.NODE_ENV === "test" ||
-          (import.meta &&
-            (import.meta as any).env &&
-            (import.meta as any).env.MODE === "test"));
+    const isTestMode =
+      typeof process !== "undefined" &&
+      (process.env.NODE_ENV === "test" ||
+        (import.meta &&
+          (import.meta as any).env &&
+          (import.meta as any).env.MODE === "test"));
 
-      if (isTestMode) {
-        storage.setPWAGuideShown(true);
-        onComplete();
-        return;
-      }
+    if (isTestMode) {
+      storage.setPWAGuideShown(true);
+      onAuthenticated(session);
+      return;
+    }
 
-      // PWA Guide anzeigen, falls noch nicht gesehen
-      if (!storage.getPWAGuideShown()) {
-        setShowPWAGuide(true);
+    if (!storage.getPWAGuideShown()) {
+      setPendingSession(session);
+      setShowPWAGuide(true);
+      return;
+    }
+
+    onAuthenticated(session);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitError("");
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      if (mode === "register") {
+        const response = await apiService.registerEmployee({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          pin: pin.trim(),
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || "Registrierung fehlgeschlagen");
+        }
+        completeAuthentication(employee);
+      } else if (mode === "login") {
+        const response = await apiService.loginEmployee({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          pin: pin.trim(),
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || "Anmeldung fehlgeschlagen");
+        }
+        completeAuthentication(employee);
       } else {
-        onComplete();
+        const response = await apiService.resetEmployeePin({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          pin: pin.trim(),
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || "PIN konnte nicht zurückgesetzt werden");
+        }
+        completeAuthentication(employee);
       }
+    } catch (submitErrorValue) {
+      setSubmitError(
+        submitErrorValue instanceof Error
+          ? submitErrorValue.message
+          : "Aktion konnte nicht abgeschlossen werden",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // PWA Guide abgeschlossen
   const handlePWAGuideComplete = () => {
     setShowPWAGuide(false);
-    onComplete();
+    if (pendingSession) {
+      onAuthenticated(pendingSession);
+      setPendingSession(null);
+    }
   };
 
-  // Laden der gespeicherten Daten
   useEffect(() => {
     const savedName = storage.getEmployeeName();
     if (savedName) {
-      const nameParts = savedName.split(" ");
-      setFirstName(nameParts[0] || "");
-      setLastName(nameParts.slice(1).join(" ") || "");
+      const parts = savedName.split(" ");
+      setFirstName(parts[0] || "");
+      setLastName(parts.slice(1).join(" ") || "");
+      setMode("login");
     }
     setConsent(storage.getConsent());
   }, []);
+
+  const modeDescription =
+    mode === "register"
+      ? "Beim ersten Mal bitte Name, Handynummer und PIN festlegen."
+      : mode === "login"
+        ? "Bitte mit Vorname, Nachname und PIN anmelden."
+        : "Handynummer eingeben und eine neue PIN festlegen.";
+
+  const submitLabel =
+    mode === "register"
+      ? "Jetzt registrieren"
+      : mode === "login"
+        ? "Anmelden"
+        : "PIN zurücksetzen";
 
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
@@ -140,7 +213,6 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
           transition={{ duration: 0.5 }}
         >
           <div className="app-surface-card rounded-2xl overflow-hidden">
-            {/* Header */}
             <div className="text-center p-6 sm:p-8 bg-gradient-to-br from-slate-50 to-white border-b border-slate-200">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -160,15 +232,36 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
               <h2 className="text-lg sm:text-xl text-slate-600 mb-1 font-medium">
                 {t("welcome.subtitle")}
               </h2>
-              <p className="text-sm text-slate-500">
-                {t("welcome.description")}
-              </p>
+              <p className="text-sm text-slate-500">{modeDescription}</p>
             </div>
 
-            {/* Main Form */}
             <div className="p-6 sm:p-8 space-y-6">
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
+                {[
+                  { id: "register", label: "Registrieren" },
+                  { id: "login", label: "Anmelden" },
+                  { id: "resetPin", label: "PIN vergessen" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setMode(item.id as WelcomeMode);
+                      setSubmitError("");
+                      setErrors({});
+                    }}
+                    className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                      mode === item.id
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Language Selection */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -196,7 +289,6 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                   </label>
                 </motion.div>
 
-                {/* Name Fields */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -254,82 +346,171 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                   </div>
                 </motion.div>
 
-                {/* Privacy Section */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <div className="app-surface-card rounded-xl p-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowPrivacy(!showPrivacy)}
-                      className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center flex-shrink-0">
-                          <Shield className="w-5 h-5 text-primary-600" />
-                        </div>
-                        <span className="font-semibold text-slate-900">
-                          {t("welcome.privacy.title")}
-                        </span>
-                      </div>
-                      <motion.div
-                        animate={{ rotate: showPrivacy ? 180 : 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <ChevronDown className="w-5 h-5 text-primary-600" />
-                      </motion.div>
-                    </button>
-
-                    {showPrivacy && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="mt-4 pt-4 border-t border-slate-200"
-                      >
-                        <p className="text-sm text-slate-600 leading-relaxed">
-                          {t("welcome.privacy.text")}
-                        </p>
-                      </motion.div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Consent Checkbox */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.6 }}
-                >
-                  <label className="flex items-start space-x-3 cursor-pointer group">
-                    <div className="relative flex items-center justify-center flex-shrink-0">
+                {mode !== "login" && (
+                  <div>
+                    <label className="block mb-2">
+                      <span className="text-slate-700 font-medium">
+                        Handynummer <span className="text-red-500">*</span>
+                      </span>
                       <input
-                        type="checkbox"
-                        checked={consent}
+                        type="tel"
+                        value={phoneNumber}
                         onChange={(e) => {
-                          setConsent(e.target.checked);
-                          if (errors.consent) {
-                            setErrors({ ...errors, consent: undefined });
+                          setPhoneNumber(e.target.value);
+                          if (errors.phoneNumber) {
+                            setErrors({ ...errors, phoneNumber: undefined });
                           }
                         }}
-                        className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                        placeholder="z. B. 0176 12345678"
+                        className={`input-field mt-2 ${
+                          errors.phoneNumber ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                        }`}
                       />
-                    </div>
-                    <span className="text-sm text-slate-600 flex-1 pt-0.5">
-                      {t("welcome.consent")}
-                    </span>
-                  </label>
-                  {errors.consent && (
-                    <p className="text-red-500 text-sm mt-2 ml-8">
-                      {errors.consent}
-                    </p>
-                  )}
-                </motion.div>
+                      {errors.phoneNumber && (
+                        <p className="text-red-500 text-sm mt-1">{errors.phoneNumber}</p>
+                      )}
+                    </label>
+                  </div>
+                )}
 
-                {/* Submit Button */}
+                <div className={mode === "login" ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
+                  <div>
+                    <label className="block mb-2">
+                      <span className="text-slate-700 font-medium">
+                        4-stellige PIN <span className="text-red-500">*</span>
+                      </span>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={pin}
+                        onChange={(e) => {
+                          setPin(e.target.value.replace(/\D+/g, "").slice(0, 4));
+                          if (errors.pin) {
+                            setErrors({ ...errors, pin: undefined });
+                          }
+                        }}
+                        placeholder="••••"
+                        className={`input-field mt-2 ${
+                          errors.pin ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                        }`}
+                      />
+                      {errors.pin && (
+                        <p className="text-red-500 text-sm mt-1">{errors.pin}</p>
+                      )}
+                    </label>
+                  </div>
+
+                  {mode !== "login" && (
+                    <div>
+                      <label className="block mb-2">
+                        <span className="text-slate-700 font-medium">
+                          PIN wiederholen <span className="text-red-500">*</span>
+                        </span>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={pinRepeat}
+                          onChange={(e) => {
+                            setPinRepeat(e.target.value.replace(/\D+/g, "").slice(0, 4));
+                            if (errors.pinRepeat) {
+                              setErrors({ ...errors, pinRepeat: undefined });
+                            }
+                          }}
+                          placeholder="••••"
+                          className={`input-field mt-2 ${
+                            errors.pinRepeat ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                          }`}
+                        />
+                        {errors.pinRepeat && (
+                          <p className="text-red-500 text-sm mt-1">{errors.pinRepeat}</p>
+                        )}
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {mode === "register" && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 }}
+                    >
+                      <div className="app-surface-card rounded-xl p-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowPrivacy(!showPrivacy)}
+                          className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center flex-shrink-0">
+                              <Shield className="w-5 h-5 text-primary-600" />
+                            </div>
+                            <span className="font-semibold text-slate-900">
+                              {t("welcome.privacy.title")}
+                            </span>
+                          </div>
+                          <motion.div
+                            animate={{ rotate: showPrivacy ? 180 : 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <ChevronDown className="w-5 h-5 text-primary-600" />
+                          </motion.div>
+                        </button>
+
+                        {showPrivacy && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            transition={{ duration: 0.3 }}
+                            className="mt-4 pt-4 border-t border-slate-200"
+                          >
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              Ihre Daten werden für Anmeldung, Stundenzettel und Freigaben in der App und im Backend gespeichert.
+                            </p>
+                          </motion.div>
+                        )}
+                      </div>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.6 }}
+                    >
+                      <label className="flex items-start space-x-3 cursor-pointer group">
+                        <div className="relative flex items-center justify-center flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={consent}
+                            onChange={(e) => {
+                              setConsent(e.target.checked);
+                              if (errors.consent) {
+                                setErrors({ ...errors, consent: undefined });
+                              }
+                            }}
+                            className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-sm text-slate-600 flex-1 pt-0.5">
+                          Ich habe die Datenschutzinformationen gelesen und stimme der Speicherung meiner Daten zu.
+                        </span>
+                      </label>
+                      {errors.consent && (
+                        <p className="text-red-500 text-sm mt-2 ml-8">{errors.consent}</p>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+
+                {submitError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {submitError}
+                  </div>
+                )}
+
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -337,28 +518,24 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                 >
                   <button
                     type="submit"
-                    disabled={!consent}
+                    disabled={isSubmitting}
                     className="w-full py-3 text-base font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {t("welcome.continue")}
+                    {isSubmitting ? "Bitte warten..." : submitLabel}
                   </button>
                 </motion.div>
               </form>
             </div>
 
-            {/* Footer */}
             <div className="text-center p-6 bg-slate-50/70 border-t border-slate-200">
               <p className="text-sm text-slate-500">
                 {t("footer.version", { version: APP_VERSION })}
               </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {t("footer.features")}
-              </p>
+              <p className="text-xs text-slate-400 mt-1">{t("footer.features")}</p>
             </div>
           </div>
         </motion.div>
 
-        {/* PWA Install Guide */}
         {showPWAGuide && (
           <PWAInstallGuide
             onClose={handlePWAGuideComplete}

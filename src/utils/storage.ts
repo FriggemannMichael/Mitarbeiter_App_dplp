@@ -130,6 +130,10 @@ export const storage = {
     return localStorage.getItem(NAME_KEY) || "";
   },
 
+  clearEmployeeName: (): void => {
+    localStorage.removeItem(NAME_KEY);
+  },
+
   // Datenschutz-Zustimmung
   setConsent: (consent: boolean): void => {
     localStorage.setItem(CONSENT_KEY, consent.toString());
