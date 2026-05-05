@@ -33,7 +33,6 @@ EMPLOYEE_SESSION_COOKIE_SAMESITE = (
 EMPLOYEE_SESSION_COOKIE_MAX_AGE = int(
     os.environ.get('EMPLOYEE_SESSION_COOKIE_MAX_AGE', str(60 * 60 * 24 * 30))
 )
-EMPLOYEE_SESSION_HEADER_NAME = 'X-Employee-Session'
 EMPLOYEE_AUTH_MAX_ATTEMPTS = int(
     os.environ.get('EMPLOYEE_AUTH_MAX_ATTEMPTS', '5')
 )
@@ -134,10 +133,7 @@ def hash_employee_session_token(token: str) -> str:
 
 
 def get_employee_session_token_from_request(request) -> str:
-    cookie_token = (request.COOKIES.get(EMPLOYEE_SESSION_COOKIE_NAME) or '').strip()
-    if cookie_token:
-        return cookie_token
-    return (request.headers.get(EMPLOYEE_SESSION_HEADER_NAME) or '').strip()
+    return (request.COOKIES.get(EMPLOYEE_SESSION_COOKIE_NAME) or '').strip()
 
 
 def get_employee_session_from_token(token: str, customer_key: str) -> EmployeeSession | None:

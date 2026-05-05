@@ -36,6 +36,7 @@ from api.services.employee_device_service import (
     create_employee_csrf_token,
     delete_employee_device_cookie,
     delete_employee_csrf_cookie,
+    get_employee_csrf_token_from_request,
     set_employee_csrf_cookie,
 )
 from api.services.tenant_service import get_employee_request_customer_key
@@ -60,7 +61,6 @@ def _build_auth_response(profile, *, created: bool = False):
         'employee': serialize_employee_profile(profile),
         'created': created,
         'csrf_token': csrf_token,
-        'session_token': session_token,
     })
     set_employee_session_cookie(response, session_token)
     set_employee_csrf_cookie(response, csrf_token)
@@ -290,9 +290,12 @@ def employee_update_phone(request):
 def employee_session(request):
     customer_key = get_employee_request_customer_key(request)
     profile, token = get_employee_profile_from_request(request, customer_key, return_token=True)
+    csrf_token = get_employee_csrf_token_from_request(request) or create_employee_csrf_token()
     response = success_response({
         'employee': serialize_employee_profile(profile) if profile else None,
+        'csrf_token': csrf_token if profile else None,
     })
     if profile and token:
         set_employee_session_cookie(response, token)
+        set_employee_csrf_cookie(response, csrf_token)
     return response
