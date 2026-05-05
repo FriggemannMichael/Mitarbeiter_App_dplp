@@ -140,15 +140,64 @@ function AppContent() {
           ),
         );
 
+        const backendUpdatedAtBySheet = new Map<string, number>();
+        const weekGroups = new Map<string, { year: number; week: number }>();
+        storedWeeks.forEach((weekData) => {
+          weekGroups.set(`${weekData.year}-${weekData.week}`, {
+            year: weekData.year,
+            week: weekData.week,
+          });
+        });
+
+        for (const { year, week } of weekGroups.values()) {
+          const listResponse = await apiService.listTimesheets<import("./types/weekdata.types").WeekData>({
+            year,
+            week,
+          });
+          if (!listResponse.success || !Array.isArray(listResponse.data)) {
+            continue;
+          }
+          listResponse.data.forEach((sheet) => {
+            const sheetId = Number(sheet.sheet_id ?? sheet.weekData?.sheetId ?? 1);
+            const updatedAt = sheet.updated_at
+              ? new Date(sheet.updated_at).getTime()
+              : 0;
+            backendUpdatedAtBySheet.set(`${year}-${week}-${sheetId}`, updatedAt);
+          });
+        }
+
+        const staleOrMissingBackendWeeks = storedWeeks.filter((weekData) => {
+          const sheetId = weekData.sheetId ?? 1;
+          const backendUpdatedAt = backendUpdatedAtBySheet.get(
+            `${weekData.year}-${weekData.week}-${sheetId}`,
+          );
+          if (backendUpdatedAt == null) {
+            return true;
+          }
+          const localUpdatedAt = weekData.updatedAt
+            ? new Date(weekData.updatedAt).getTime()
+            : 0;
+          return localUpdatedAt > backendUpdatedAt;
+        });
+
         if (
           migrationAlreadyCompleted &&
-          pendingWeeks.length === 0
+          pendingWeeks.length === 0 &&
+          staleOrMissingBackendWeeks.length === 0
         ) {
           migratedEmployeeWeeksRef.current = String(employeeId);
           return;
         }
 
-        const weeksToSync = migrationAlreadyCompleted ? pendingWeeks : storedWeeks;
+        const weeksToSyncMap = new Map<string, (typeof storedWeeks)[number]>();
+        const baseWeeksToSync = migrationAlreadyCompleted ? pendingWeeks : storedWeeks;
+        [...baseWeeksToSync, ...staleOrMissingBackendWeeks].forEach((weekData) => {
+          weeksToSyncMap.set(
+            `${weekData.year}-${weekData.week}-${weekData.sheetId ?? 1}`,
+            weekData,
+          );
+        });
+        const weeksToSync = Array.from(weeksToSyncMap.values());
 
         const hasAmbiguousWeeks = weeksToSync.some(
           (weekData) => !weekData.employeeId?.trim(),
@@ -200,6 +249,7 @@ function AppContent() {
               employeeName,
               migratedCount,
               pendingCount: pendingWeeks.length,
+              staleOrMissingBackendCount: staleOrMissingBackendWeeks.length,
             },
           });
         }
