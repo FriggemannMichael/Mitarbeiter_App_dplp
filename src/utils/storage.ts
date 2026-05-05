@@ -327,6 +327,43 @@ export const storage = {
     );
   },
 
+  getRecentCustomers: (
+    limit: number = 20,
+    additionalWeeks: WeekData[] = [],
+  ): Array<{ name: string; email: string }> => {
+    const entriesWithTimestamp: Array<{
+      name: string;
+      email: string;
+      updatedAt: number;
+    }> = [];
+
+    const persistedWeeks = storage.getAllStoredWeeks();
+    const allWeeks = [...persistedWeeks, ...additionalWeeks];
+
+    allWeeks.forEach((weekData) => {
+      const name = weekData.customer?.trim();
+      if (!name) return;
+      const email = weekData.customerEmail?.trim() ?? "";
+      const updatedAt = weekData.updatedAt
+        ? new Date(weekData.updatedAt).getTime()
+        : 0;
+      entriesWithTimestamp.push({ name, email, updatedAt });
+    });
+
+    const latestByName = new Map<string, { email: string; updatedAt: number }>();
+    entriesWithTimestamp.forEach(({ name, email, updatedAt }) => {
+      const current = latestByName.get(name);
+      if (!current || updatedAt >= current.updatedAt) {
+        latestByName.set(name, { email, updatedAt });
+      }
+    });
+
+    return Array.from(latestByName.entries())
+      .sort((a, b) => b[1].updatedAt - a[1].updatedAt || a[0].localeCompare(b[0], "de"))
+      .slice(0, limit)
+      .map(([name, { email }]) => ({ name, email }));
+  },
+
   getRecentDayFieldValues: (
     field: "orderNumber" | "commission",
     limit: number = 20,

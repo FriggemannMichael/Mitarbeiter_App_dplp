@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Box,
   Container,
   Typography,
@@ -147,6 +148,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
 
   const [formData, setFormData] = useState<VacationFormData>(INITIAL_FORM_DATA);
   const [customer, setCustomer] = useState("");
+  const customerOptions = useMemo(() => storage.getRecentCustomers(20), []);
   const [hasReadTerms, setHasReadTerms] = useState(false);
   const [employeeSignature, setEmployeeSignature] = useState<
     string | undefined
@@ -417,13 +419,30 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
               <SectionCard title={t("timesheet.customer")}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <BusinessIcon sx={{ color: "#3b82f6" }} />
-                  <TextField
+                  <Autocomplete
+                    freeSolo
+                    options={customerOptions}
+                    getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                     value={customer}
-                    onChange={(e) => setCustomer(e.target.value)}
-                    placeholder={t("timesheet.placeholders.customer")}
+                    onInputChange={(_, value, reason) => {
+                      if (reason !== "reset") setCustomer(value);
+                    }}
+                    onChange={(_, value) => {
+                      if (value && typeof value !== "string") {
+                        setCustomer(value.name);
+                      } else if (typeof value === "string") {
+                        setCustomer(value);
+                      }
+                    }}
                     fullWidth
-                    required
-                    error={!customer.trim()}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder={t("timesheet.placeholders.customer")}
+                        required
+                        error={!customer.trim()}
+                      />
+                    )}
                   />
                 </Stack>
               </SectionCard>

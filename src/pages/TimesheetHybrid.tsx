@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Box,
   Container,
   Typography,
@@ -104,6 +105,11 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
     switchToSheet,
     createNewSheet,
   } = useWeekData();
+
+  const customerOptions = useMemo(
+    () => storage.getRecentCustomers(20, allSheets),
+    [allSheets],
+  );
 
   // Berechne totalHours aus weekStats
   const weekStats = getWeekStats();
@@ -522,17 +528,35 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <BusinessIcon color="primary" />
-                <TextField
+                <Autocomplete
+                  freeSolo
+                  options={customerOptions}
+                  getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                   value={weekData.customer}
-                  onChange={(e) => updateCustomer(e.target.value)}
-                  placeholder={t("timesheet.placeholders.customer")}
-                  fullWidth
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") updateCustomer(value);
+                  }}
+                  onChange={(_, value) => {
+                    if (value && typeof value !== "string") {
+                      updateCustomer(value.name);
+                      if (value.email) updateCustomerEmail(value.email);
+                    } else if (typeof value === "string") {
+                      updateCustomer(value);
+                    }
+                  }}
                   disabled={weekData.locked}
-                  required
-                  error={!weekData.customer.trim()}
-                  helperText={
-                    !weekData.customer.trim() ? t("validation.required") : ""
-                  }
+                  fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder={t("timesheet.placeholders.customer")}
+                      required
+                      error={!weekData.customer.trim()}
+                      helperText={
+                        !weekData.customer.trim() ? t("validation.required") : ""
+                      }
+                    />
+                  )}
                 />
               </Stack>
 
