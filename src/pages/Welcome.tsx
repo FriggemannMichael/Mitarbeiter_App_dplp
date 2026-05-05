@@ -268,7 +268,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
                 <img
                   src={companyConfig.company_logo || defaultLogoSrc}
                   alt={companyConfig.company_name || "Firma"}
-                  className="h-28 w-auto shadow-sm"
+                  className="h-28 w-auto"
                 />
               </motion.div>
               <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
