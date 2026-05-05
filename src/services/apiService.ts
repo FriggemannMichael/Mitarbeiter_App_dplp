@@ -238,6 +238,14 @@ class ApiService {
     }
   }
 
+  private shouldSilenceApiError(endpoint: string, error: unknown): boolean {
+    return (
+      endpoint === "/api/employee/session" &&
+      error instanceof ApiRequestError &&
+      error.status === 401
+    );
+  }
+
   /**
    * Generische API-Anfrage mit Error-Handling
    */
@@ -297,7 +305,9 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error(`API Error (${endpoint}):`, error);
+      if (!this.shouldSilenceApiError(endpoint, error)) {
+        console.error(`API Error (${endpoint}):`, error);
+      }
 
       // Network-Error vs. API-Error unterscheiden
       if (
