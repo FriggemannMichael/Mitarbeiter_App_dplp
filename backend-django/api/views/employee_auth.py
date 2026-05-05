@@ -60,6 +60,7 @@ def _build_auth_response(profile, *, created: bool = False):
         'employee': serialize_employee_profile(profile),
         'created': created,
         'csrf_token': csrf_token,
+        'session_token': session_token,
     })
     set_employee_session_cookie(response, session_token)
     set_employee_csrf_cookie(response, csrf_token)

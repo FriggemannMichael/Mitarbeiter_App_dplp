@@ -162,6 +162,7 @@ interface EmployeeAuthPayload {
   employee: EmployeeSessionDto;
   created?: boolean;
   csrf_token?: string;
+  session_token?: string;
 }
 
 interface EmployeeSessionPayload {
@@ -182,6 +183,7 @@ class ApiService {
   private customerKey: string;
   private authToken: string;
   private employeeCsrfToken: string;
+  private employeeSessionToken: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -191,6 +193,10 @@ class ApiService {
         ? window.localStorage.getItem("admin_auth_token") || ""
         : "";
     this.employeeCsrfToken = "";
+    this.employeeSessionToken =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("employee_session_token") || ""
+        : "";
   }
 
   setBaseUrl(baseUrl: string): void {
@@ -219,6 +225,18 @@ class ApiService {
 
   setEmployeeCsrfToken(token: string): void {
     this.employeeCsrfToken = (token || "").trim();
+  }
+
+  setEmployeeSessionToken(token: string): void {
+    this.employeeSessionToken = (token || "").trim();
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (this.employeeSessionToken) {
+      window.localStorage.setItem("employee_session_token", this.employeeSessionToken);
+    } else {
+      window.localStorage.removeItem("employee_session_token");
+    }
   }
 
   private getCookieValue(name: string): string {
@@ -275,6 +293,10 @@ class ApiService {
       this.employeeCsrfToken || this.getCookieValue("employee_csrf");
     if (employeeCsrfToken) {
       (defaultHeaders as Record<string, string>)["X-Employee-CSRF"] = employeeCsrfToken;
+    }
+    if (this.employeeSessionToken) {
+      (defaultHeaders as Record<string, string>)["X-Employee-Session"] =
+        this.employeeSessionToken;
     }
 
     const config: RequestInit = {
@@ -489,6 +511,9 @@ class ApiService {
     if (response.success && response.data?.csrf_token) {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
+    if (response.success && response.data?.session_token) {
+      this.setEmployeeSessionToken(response.data.session_token);
+    }
     return response;
   }
 
@@ -501,6 +526,9 @@ class ApiService {
     const response = await this.post<EmployeeAuthPayload>("/api/employee/login", payload);
     if (response.success && response.data?.csrf_token) {
       this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    if (response.success && response.data?.session_token) {
+      this.setEmployeeSessionToken(response.data.session_token);
     }
     return response;
   }
@@ -515,6 +543,9 @@ class ApiService {
     if (response.success && response.data?.csrf_token) {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
+    if (response.success && response.data?.session_token) {
+      this.setEmployeeSessionToken(response.data.session_token);
+    }
     return response;
   }
 
@@ -527,11 +558,17 @@ class ApiService {
 
   async logoutEmployee(): Promise<ApiResponse<null>> {
     this.setEmployeeCsrfToken("");
+    this.setEmployeeSessionToken("");
     return this.post<null>("/api/employee/logout", {});
   }
 
   async getEmployeeSession(): Promise<ApiResponse<EmployeeSessionPayload>> {
-    return this.get<EmployeeSessionPayload>("/api/employee/session");
+    const response = await this.get<EmployeeSessionPayload>("/api/employee/session");
+    if (response.success && !response.data?.employee) {
+      this.setEmployeeSessionToken("");
+      this.setEmployeeCsrfToken("");
+    }
+    return response;
   }
 
   async saveTimesheet<TWeekData>(payload: {
