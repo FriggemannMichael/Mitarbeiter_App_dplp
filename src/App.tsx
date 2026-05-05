@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { storage } from "./utils/storage";
 import { Welcome } from "./pages/Welcome";
@@ -16,20 +16,22 @@ import {
 } from "./contexts/NotificationContext";
 import { useConfig } from "./contexts/ConfigContext";
 import { ToastContainer } from "./components/Toast";
-import { apiService } from "./services/apiService";
+import {
+  apiService,
+  type EmployeeSessionDto,
+} from "./services/apiService";
 import { logger } from "./services/logger";
-import "./i18n"; // i18n initialisieren
+import "./i18n";
 
-// Innere App-Komponente (benötigt NotificationProvider)
 function AppContent() {
   const { t } = useTranslation();
   const { error, notifications, removeNotification } = useNotification();
   const { isLoading: isConfigLoading } = useConfig();
-  const [isOnboarded, setIsOnboarded] = useState(false);
+  const [employeeSession, setEmployeeSession] = useState<EmployeeSessionDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
-  const initializedEmployeeDeviceRef = useRef<string>("");
   const migratedEmployeeWeeksRef = useRef<string>("");
+
   const isAdminRoute =
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
@@ -39,10 +41,8 @@ function AppContent() {
     currentPath === "/pro/verwaltung" ||
     currentPath.endsWith("/verwaltung");
 
-  // Performance-Tracking
   usePerformanceMonitoring();
 
-  // URL-Änderungen überwachen (für /admin Route)
   useEffect(() => {
     const handleLocationChange = () => {
       setCurrentPath(window.location.pathname);
@@ -52,27 +52,56 @@ function AppContent() {
     return () => window.removeEventListener("popstate", handleLocationChange);
   }, []);
 
-  // Onboarding-Status prüfen
   useEffect(() => {
-    const checkOnboardingStatus = () => {
-      const hasConsent = storage.getConsent();
-      const hasName = storage.getEmployeeName();
-
-      // Benutzer ist onboarded wenn beide Bedingungen erfüllt sind
-      setIsOnboarded(hasConsent && hasName.length > 0);
-      setLoading(false);
-    };
-
-    // LocalStorage-Verfügbarkeit prüfen
     if (!storage.isAvailable()) {
       error(
         "LocalStorage ist nicht verfügbar. Die App funktioniert möglicherweise nicht korrekt.",
-        5000
+        5000,
       );
     }
+  }, [error]);
 
-    checkOnboardingStatus();
-  }, []);
+  useEffect(() => {
+    if (isConfigLoading || isAdminRoute || isCustomerPortalRoute) {
+      if (!isConfigLoading) {
+        setLoading(false);
+      }
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadEmployeeSession = async () => {
+      try {
+        const response = await apiService.getEmployeeSession();
+        const nextSession = response.data?.employee || null;
+
+        if (!isCancelled) {
+          setEmployeeSession(nextSession);
+          if (nextSession?.display_name) {
+            storage.setEmployeeName(nextSession.display_name);
+          } else {
+            storage.clearEmployeeName();
+          }
+        }
+      } catch {
+        if (!isCancelled) {
+          setEmployeeSession(null);
+          storage.clearEmployeeName();
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadEmployeeSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAdminRoute, isCustomerPortalRoute, isConfigLoading]);
 
   useEffect(() => {
     if (
@@ -80,128 +109,124 @@ function AppContent() {
       isConfigLoading ||
       isAdminRoute ||
       isCustomerPortalRoute ||
-      !isOnboarded
+      !employeeSession?.display_name
     ) {
       return;
     }
 
-    const employeeName = storage.getEmployeeName().trim();
-    if (!employeeName) {
-      return;
-    }
-
-    if (initializedEmployeeDeviceRef.current === employeeName) {
-      return;
-    }
-
     let isCancelled = false;
+    const employeeId = employeeSession.id;
+    const employeeName = employeeSession.display_name.trim();
 
-    const initializeEmployeeDevice = async () => {
+    const migrateEmployeeWeeks = async () => {
       try {
-        apiService.resetEmployeeTimesheetSyncSupport();
-        const response = await apiService.initEmployeeDevice(employeeName);
-        if (!response.success) {
-          throw new Error(response.error || "Employee device init failed");
+        if (
+          migratedEmployeeWeeksRef.current === String(employeeId) ||
+          storage.hasCompletedBackendTimesheetMigration(employeeId)
+        ) {
+          migratedEmployeeWeeksRef.current = String(employeeId);
+          return;
         }
 
+        if (employeeSession.has_name_duplicates) {
+          migratedEmployeeWeeksRef.current = String(employeeId);
+          logger.warn(
+            "Skipped local timesheet migration because employee name is not unique",
+            {
+              component: "App",
+              data: {
+                employeeId,
+                employeeName,
+              },
+            },
+          );
+          return;
+        }
+
+        const storedWeeks = storage.getAllStoredWeeks().filter(
+          (weekData) => weekData.employeeName?.trim() === employeeName,
+        );
+
+        let migratedCount = 0;
+        for (const weekData of storedWeeks) {
+          await apiService.saveTimesheet({
+            weekData,
+            year: weekData.year,
+            week: weekData.week,
+            sheetId: weekData.sheetId ?? 1,
+            displayName: employeeName,
+          });
+          migratedCount += 1;
+        }
+
+        storage.markBackendTimesheetMigrationComplete(employeeId);
+        migratedEmployeeWeeksRef.current = String(employeeId);
+
         if (!isCancelled) {
-          initializedEmployeeDeviceRef.current = employeeName;
-          logger.info("Employee device initialized", {
+          logger.info("Local timesheets migrated to backend", {
             component: "App",
             data: {
               employeeName,
-              created: response.data?.created ?? false,
-              deviceId: response.data?.device?.id,
+              migratedCount,
             },
           });
-
-          if (
-            migratedEmployeeWeeksRef.current !== employeeName &&
-            !storage.hasCompletedBackendTimesheetMigration(employeeName)
-          ) {
-            const storedWeeks = storage.getAllStoredWeeks().filter(
-              (weekData) => weekData.employeeName?.trim() === employeeName,
-            );
-
-            if (storedWeeks.length > 0) {
-              let migratedCount = 0;
-
-              for (const weekData of storedWeeks) {
-                await apiService.saveTimesheet({
-                  weekData,
-                  year: weekData.year,
-                  week: weekData.week,
-                  sheetId: weekData.sheetId ?? 1,
-                  displayName: employeeName,
-                });
-                migratedCount += 1;
-              }
-
-              storage.markBackendTimesheetMigrationComplete(employeeName);
-              migratedEmployeeWeeksRef.current = employeeName;
-              logger.info("Local timesheets migrated to backend", {
-                component: "App",
-                data: {
-                  employeeName,
-                  migratedCount,
-                },
-              });
-            } else {
-              storage.markBackendTimesheetMigrationComplete(employeeName);
-              migratedEmployeeWeeksRef.current = employeeName;
-            }
-          } else {
-            migratedEmployeeWeeksRef.current = employeeName;
-          }
         }
-      } catch (error) {
-        logger.warn("Employee device initialization failed", {
-          component: "App",
-          data: {
-            employeeName,
-            error:
-              error instanceof Error ? error.message : String(error),
-          },
-        });
+      } catch (migrationError) {
+        if (!isCancelled) {
+          logger.warn("Local timesheet migration failed", {
+            component: "App",
+            data: {
+              employeeName,
+              error:
+                migrationError instanceof Error
+                  ? migrationError.message
+                  : String(migrationError),
+            },
+          });
+        }
       }
     };
 
-    initializeEmployeeDevice();
+    void migrateEmployeeWeeks();
 
     return () => {
       isCancelled = true;
     };
-  }, [isAdminRoute, isCustomerPortalRoute, isOnboarded, isConfigLoading, loading]);
+  }, [employeeSession, isAdminRoute, isCustomerPortalRoute, isConfigLoading, loading]);
 
-  // Dark Mode nur im App-Bereich aktivieren (nicht im Welcome/Login-Bereich)
   useEffect(() => {
-    const enableTheme = isOnboarded || isAdminRoute || isCustomerPortalRoute;
+    const enableTheme = Boolean(employeeSession) || isAdminRoute || isCustomerPortalRoute;
     window.dispatchEvent(
       new CustomEvent("app:set-theme-enabled", {
         detail: { enabled: enableTheme },
-      })
+      }),
     );
-  }, [isOnboarded, isAdminRoute, isCustomerPortalRoute]);
+  }, [employeeSession, isAdminRoute, isCustomerPortalRoute]);
 
-  // Onboarding abschließen
-  const handleOnboardingComplete = () => {
-    setIsOnboarded(true);
+  const handleEmployeeAuthenticated = (session: EmployeeSessionDto) => {
+    storage.setEmployeeName(session.display_name);
+    setEmployeeSession(session);
   };
 
-  // Logout (zurück zum Welcome-Screen)
-  const handleLogout = () => {
-    storage.setConsent(false);
-    setIsOnboarded(false);
+  const handleLogout = async () => {
+    try {
+      await apiService.logoutEmployee();
+    } catch {
+      // Lokalen Zustand trotzdem leeren
+    }
+
+    migratedEmployeeWeeksRef.current = "";
+    storage.clearEmployeeName();
+    setEmployeeSession(null);
   };
 
-  // Loading-Screen
   if (loading || isConfigLoading) {
     return (
       <div className="min-h-screen gradient-bg flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="relative">
-            <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <div className="absolute inset-0 w-16 h-16 border-4 border-primary-300/30 rounded-full mx-auto"></div>
+            <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="absolute inset-0 w-16 h-16 border-4 border-primary-300/30 rounded-full mx-auto" />
           </div>
           <div className="card-glass px-8 py-6 mx-auto max-w-sm">
             <h1 className="text-2xl font-bold text-gradient mb-2">
@@ -214,7 +239,6 @@ function AppContent() {
     );
   }
 
-  // Admin-Route prüfen (berücksichtigt base path /pro/)
   if (isAdminRoute) {
     return (
       <ErrorBoundary>
@@ -235,19 +259,21 @@ function AppContent() {
     <ErrorBoundary>
       <AppProviders>
         <div className="App">
-          {/* Toast-Notifications */}
           <ToastContainer
             notifications={notifications}
             onClose={removeNotification}
           />
-          {/* PWA-Komponenten */}
           <OfflineIndicator />
           <UpdateNotification />
-          {/* PWA / App UI */}
-          {isOnboarded ? (
-            <MainApp onLogout={handleLogout} />
+          {employeeSession ? (
+            <MainApp
+              employeeName={employeeSession.display_name}
+              onLogout={() => {
+                void handleLogout();
+              }}
+            />
           ) : (
-            <Welcome onComplete={handleOnboardingComplete} />
+            <Welcome onAuthenticated={handleEmployeeAuthenticated} />
           )}
         </div>
       </AppProviders>
@@ -255,7 +281,6 @@ function AppContent() {
   );
 }
 
-// Haupt-App mit NotificationProvider
 function App() {
   return (
     <NotificationProvider>

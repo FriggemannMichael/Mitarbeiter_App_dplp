@@ -28,6 +28,21 @@ interface ApiResponse<T> {
   data?: T;
   message?: string;
   error?: string;
+  code?: string;
+}
+
+class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  data?: unknown;
+
+  constructor(message: string, status: number, code?: string, data?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
 }
 
 interface LoginResponse {
@@ -132,16 +147,20 @@ export interface PortalAuditLogDto {
   actor_role?: string | null;
 }
 
-interface EmployeeDeviceResponse {
+export interface EmployeeSessionDto {
   id: number;
+  first_name: string;
+  last_name: string;
   display_name: string;
-  is_active: boolean;
-  last_seen_at?: string | null;
+  phone_number: string;
+  has_name_duplicates?: boolean;
+  customer_key: string;
+  last_login_at?: string | null;
 }
 
-interface InitEmployeeDevicePayload {
-  device: EmployeeDeviceResponse;
-  created: boolean;
+interface EmployeeAuthPayload {
+  employee: EmployeeSessionDto;
+  created?: boolean;
   csrf_token?: string;
 }
 
@@ -158,7 +177,6 @@ class ApiService {
   private baseUrl: string;
   private customerKey: string;
   private authToken: string;
-  private employeeTimesheetSyncSupported: boolean | null = null;
   private employeeCsrfToken: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
@@ -187,14 +205,6 @@ class ApiService {
     return this.baseUrl;
   }
 
-  canUseEmployeeTimesheetSync(): boolean {
-    return this.employeeTimesheetSyncSupported !== false;
-  }
-
-  resetEmployeeTimesheetSyncSupport(): void {
-    this.employeeTimesheetSyncSupported = null;
-  }
-
   setCustomerKey(customerKey: string): void {
     this.customerKey = (customerKey || "").trim();
   }
@@ -205,34 +215,6 @@ class ApiService {
 
   setEmployeeCsrfToken(token: string): void {
     this.employeeCsrfToken = (token || "").trim();
-  }
-
-  private isEmployeeTimesheetSyncEndpoint(endpoint: string): boolean {
-    return [
-      "/api/employee-device/init",
-      "/api/save-timesheet",
-      "/api/get-timesheet",
-      "/api/list-timesheets",
-      "/api/archive-timesheet",
-    ].some((candidate) => endpoint.startsWith(candidate));
-  }
-
-  private markEmployeeTimesheetSyncFailure(endpoint: string, error: unknown): void {
-    if (!this.isEmployeeTimesheetSyncEndpoint(endpoint)) {
-      return;
-    }
-
-    const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "";
-
-    if (
-      message.includes("Invalid JSON response from API") ||
-      message.includes("Netzwerkfehler") ||
-      message.includes("HTTP 404") ||
-      message.includes("404")
-    ) {
-      this.employeeTimesheetSyncSupported = false;
-    }
   }
 
   private getCookieValue(name: string): string {
@@ -305,19 +287,17 @@ class ApiService {
 
       // HTTP-Fehler prüfen
       if (!response.ok) {
-        throw new Error(
+        throw new ApiRequestError(
           data.error || `HTTP ${response.status}: ${response.statusText}`,
+          response.status,
+          data.code,
+          data.data,
         );
-      }
-
-      if (this.isEmployeeTimesheetSyncEndpoint(endpoint)) {
-        this.employeeTimesheetSyncSupported = true;
       }
 
       return data;
     } catch (error) {
       console.error(`API Error (${endpoint}):`, error);
-      this.markEmployeeTimesheetSyncFailure(endpoint, error);
 
       // Network-Error vs. API-Error unterscheiden
       if (
@@ -485,22 +465,59 @@ class ApiService {
     );
   }
 
-  async initEmployeeDevice(
-    displayName?: string,
-  ): Promise<ApiResponse<InitEmployeeDevicePayload>> {
-    if (!this.canUseEmployeeTimesheetSync()) {
-      throw new Error("Employee backend sync unavailable");
-    }
-    const response = await this.post<InitEmployeeDevicePayload>(
-      "/api/employee-device/init",
-      {
-      displayName: (displayName || "").trim(),
-      },
-    );
+  async registerEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/register", payload);
     if (response.success && response.data?.csrf_token) {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
     return response;
+  }
+
+  async loginEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    pin: string;
+    phoneNumber?: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/login", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async resetEmployeePin(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/reset-pin", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async updateEmployeePhone(payload: {
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    return this.post<EmployeeAuthPayload>("/api/employee/update-phone", payload);
+  }
+
+  async logoutEmployee(): Promise<ApiResponse<null>> {
+    this.setEmployeeCsrfToken("");
+    return this.post<null>("/api/employee/logout", {});
+  }
+
+  async getEmployeeSession(): Promise<ApiResponse<{ employee: EmployeeSessionDto }>> {
+    return this.get<{ employee: EmployeeSessionDto }>("/api/employee/session");
   }
 
   async saveTimesheet<TWeekData>(payload: {
@@ -517,9 +534,6 @@ class ApiService {
       sheet_id: string;
     }>
   > {
-    if (!this.canUseEmployeeTimesheetSync()) {
-      throw new Error("Employee backend sync unavailable");
-    }
     return this.post("/api/save-timesheet", payload);
   }
 
@@ -528,9 +542,6 @@ class ApiService {
     week: number,
     sheetId: number | string = 1,
   ): Promise<ApiResponse<TimesheetApiPayload<TWeekData> | null>> {
-    if (!this.canUseEmployeeTimesheetSync()) {
-      throw new Error("Employee backend sync unavailable");
-    }
     const search = new URLSearchParams({
       year: String(year),
       week: String(week),
@@ -544,9 +555,6 @@ class ApiService {
     week?: number;
     limit?: number;
   }): Promise<ApiResponse<Array<TimesheetApiPayload<TWeekData>>>> {
-    if (!this.canUseEmployeeTimesheetSync()) {
-      throw new Error("Employee backend sync unavailable");
-    }
     const search = new URLSearchParams();
     if (params?.year != null) search.set("year", String(params.year));
     if (params?.week != null) search.set("week", String(params.week));
@@ -569,9 +577,6 @@ class ApiService {
       archived_at?: string | null;
     }>
   > {
-    if (!this.canUseEmployeeTimesheetSync()) {
-      throw new Error("Employee backend sync unavailable");
-    }
     return this.post("/api/archive-timesheet", payload);
   }
 

@@ -256,10 +256,6 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [currentWeek]);
 
   const syncWeekToBackend = useCallback(async (weekData: WeekData) => {
-    if (!apiService.canUseEmployeeTimesheetSync()) {
-      return;
-    }
-
     try {
       await apiService.saveTimesheet({
         weekData,
@@ -411,7 +407,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         let data: WeekData | null = null;
         let backendSheets: WeekData[] = [];
 
-        if (!isConfigLoading && apiService.canUseEmployeeTimesheetSync()) {
+        if (!isConfigLoading) {
           try {
           const listResponse = await apiService.listTimesheets<WeekData>({
             year,
@@ -530,22 +526,6 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteWeek = useCallback(
     async (year: number, week: number, sheetId: number = 1) => {
       try {
-        if (!apiService.canUseEmployeeTimesheetSync()) {
-          storage.removeWeekData(year, week, sheetId);
-
-          if (
-            currentWeek?.year === year &&
-            currentWeek?.week === week &&
-            currentWeek?.sheetId === sheetId
-          ) {
-            setCurrentWeek(null);
-          }
-
-          const sheets = storage.getAllSheetsForWeek(year, week);
-          setAllSheets(sheets as WeekData[]);
-          return;
-        }
-
         const archiveResponse = await apiService.archiveTimesheet({
           year,
           week,

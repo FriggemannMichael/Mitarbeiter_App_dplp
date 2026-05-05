@@ -83,9 +83,83 @@ class EmployeeDevice(models.Model):
         return f'{self.customer_key}:{label}'
 
 
+class EmployeeProfile(models.Model):
+    customer_key = models.CharField(max_length=100, default='default', db_index=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    display_name = models.CharField(max_length=255, blank=True)
+    phone_number = models.CharField(max_length=50)
+    pin_hash = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'employee_profiles'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['customer_key', 'phone_number'],
+                name='uniq_employee_profile_customer_phone',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['customer_key', 'last_name', 'first_name'],
+                name='idx_empprofile_customer_name',
+            ),
+            models.Index(
+                fields=['customer_key', 'is_active'],
+                name='idx_empprofile_customer_active',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.customer_key}:{self.display_name or f"{self.first_name} {self.last_name}".strip()}'
+
+
+class EmployeeSession(models.Model):
+    customer_key = models.CharField(max_length=100, default='default', db_index=True)
+    employee_profile = models.ForeignKey(
+        EmployeeProfile,
+        on_delete=models.CASCADE,
+        related_name='sessions',
+    )
+    token_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'employee_sessions'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['customer_key', 'token_hash'],
+                name='uniq_employee_session_customer_token',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['customer_key', 'employee_profile', 'expires_at'],
+                name='idx_empsess_prof_exp',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.customer_key}:session-{self.pk}'
+
+
 class Timesheet(models.Model):
     customer_key = models.CharField(max_length=100, default='default', db_index=True)
     user_id = models.IntegerField(default=1)
+    employee_profile = models.ForeignKey(
+        EmployeeProfile,
+        on_delete=models.CASCADE,
+        related_name='timesheets',
+        null=True,
+        blank=True,
+    )
     employee_device = models.ForeignKey(
         EmployeeDevice,
         on_delete=models.CASCADE,
@@ -106,11 +180,19 @@ class Timesheet(models.Model):
         db_table = 'timesheets'
         constraints = [
             models.UniqueConstraint(
+                fields=['customer_key', 'employee_profile', 'week_year', 'week_number', 'sheet_id'],
+                name='uniq_timesheet_profile_week_sheet',
+            ),
+            models.UniqueConstraint(
                 fields=['customer_key', 'employee_device', 'week_year', 'week_number', 'sheet_id'],
                 name='uniq_timesheet_device_week_sheet',
             ),
         ]
         indexes = [
+            models.Index(
+                fields=['customer_key', 'employee_profile', 'week_year', 'week_number'],
+                name='idx_timesheets_profile_week',
+            ),
             models.Index(
                 fields=['customer_key', 'employee_device', 'week_year', 'week_number'],
                 name='idx_timesheets_device_week',
