@@ -120,7 +120,6 @@ function AppContent() {
 
     const migrateEmployeeWeeks = async () => {
       try {
-        apiService.resetEmployeeTimesheetSyncSupport();
         if (
           migratedEmployeeWeeksRef.current === String(employeeId) ||
           storage.hasCompletedBackendTimesheetMigration(employeeId)
@@ -131,13 +130,16 @@ function AppContent() {
 
         if (employeeSession.has_name_duplicates) {
           migratedEmployeeWeeksRef.current = String(employeeId);
-          logger.warn("Skipped local timesheet migration because employee name is not unique", {
-            component: "App",
-            data: {
-              employeeId,
-              employeeName,
+          logger.warn(
+            "Skipped local timesheet migration because employee name is not unique",
+            {
+              component: "App",
+              data: {
+                employeeId,
+                employeeName,
+              },
             },
-          });
+          );
           return;
         }
 
