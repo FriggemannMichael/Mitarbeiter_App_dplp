@@ -264,6 +264,11 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         sheetId: weekData.sheetId ?? 1,
         displayName: weekData.employeeName,
       });
+      storage.clearWeekPendingBackendSync(
+        weekData.year,
+        weekData.week,
+        weekData.sheetId ?? 1,
+      );
     } catch (error) {
       devLog("[WeekDataContext] Backend sync skipped/failed", error);
     }
@@ -292,6 +297,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return {
         employeeName: storage.getEmployeeName(),
+        employeeId: storage.getEmployeeProfileId() || undefined,
         customer: "",
         customerEmail: "",
         week,
@@ -343,10 +349,17 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       const recalculatedWeek = timeCalc.recalculateWeekData(weekData);
       const weekToSave = {
         ...recalculatedWeek,
+        employeeId:
+          recalculatedWeek.employeeId || storage.getEmployeeProfileId() || undefined,
         sheetId: recalculatedWeek.sheetId ?? 1,
       };
 
       // In Storage speichern
+      storage.markWeekPendingBackendSync(
+        weekToSave.year,
+        weekToSave.week,
+        weekToSave.sheetId,
+      );
       storage.setWeekData(
         weekToSave.year,
         weekToSave.week,
@@ -454,6 +467,12 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           // Fix: employeeName aus localStorage übernehmen falls leer
           if (!data.employeeName || data.employeeName.trim() === "") {
             data = { ...data, employeeName: storage.getEmployeeName() };
+          }
+          if (!data.employeeId || data.employeeId.trim() === "") {
+            const employeeId = storage.getEmployeeProfileId();
+            if (employeeId) {
+              data = { ...data, employeeId };
+            }
           }
           if (needsMigration(data)) {
             data = migrateWeekDataComplete(data);

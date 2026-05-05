@@ -156,19 +156,28 @@ def get_employee_session_from_token(token: str, customer_key: str) -> EmployeeSe
 
 
 def touch_employee_session(session: EmployeeSession) -> EmployeeSession:
-    session.last_seen_at = timezone.now()
-    session.save(update_fields=['last_seen_at', 'updated_at'])
+    now = timezone.now()
+    session.last_seen_at = now
+    session.expires_at = now + timedelta(seconds=EMPLOYEE_SESSION_COOKIE_MAX_AGE)
+    session.save(update_fields=['last_seen_at', 'expires_at', 'updated_at'])
     return session
 
 
-def get_employee_profile_from_request(request, customer_key: str) -> EmployeeProfile | None:
+def get_employee_profile_from_request(
+    request,
+    customer_key: str,
+    *,
+    return_token: bool = False,
+) -> 'EmployeeProfile | None | tuple[EmployeeProfile | None, str]':
     token = get_employee_session_token_from_request(request)
     if not token:
-        return None
+        return (None, '') if return_token else None
     session = get_employee_session_from_token(token, customer_key)
     if not session:
-        return None
+        return (None, '') if return_token else None
     touch_employee_session(session)
+    if return_token:
+        return session.employee_profile, token
     return session.employee_profile
 
 

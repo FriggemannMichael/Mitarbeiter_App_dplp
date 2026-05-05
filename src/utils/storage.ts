@@ -54,6 +54,7 @@ export type ShiftModel = "day" | "late" | "night" | "continuous";
 
 export interface WeekData {
   employeeName: string;
+  employeeId?: string;
   customer: string;
   customerEmail?: string;
   week: number;
@@ -90,6 +91,7 @@ export interface WeekData {
 const STORAGE_PREFIX = "wpdl_";
 const LANGUAGE_KEY = "wpdl_language";
 const NAME_KEY = "wpdl_employee_name";
+const EMPLOYEE_PROFILE_ID_KEY = "wpdl_employee_profile_id";
 const CONSENT_KEY = "wpdl_consent";
 const PWA_GUIDE_KEY = "wpdl_pwa_guide_shown";
 const PWA_MODAL_DISMISSED_KEY = "wpdl_pwa_modal_dismissed";
@@ -99,6 +101,7 @@ const BACKUP_REMINDER_DISMISSED_KEY = "wpdl_backup_reminder_dismissed";
 const FIRST_USE_DATE_KEY = "wpdl_first_use_date";
 const THEME_KEY = "wpdl_theme";
 const BACKEND_TIMESHEET_MIGRATION_PREFIX = "wpdl_backend_timesheet_migration_v2_";
+const BACKEND_TIMESHEET_PENDING_PREFIX = "wpdl_backend_timesheet_pending_v1_";
 
 // Helper Funktionen für localStorage
 export const storage = {
@@ -132,6 +135,20 @@ export const storage = {
 
   clearEmployeeName: (): void => {
     localStorage.removeItem(NAME_KEY);
+  },
+
+  setEmployeeProfileId: (employeeId: number | string): void => {
+    const normalized = String(employeeId || "").trim();
+    if (!normalized) return;
+    localStorage.setItem(EMPLOYEE_PROFILE_ID_KEY, normalized);
+  },
+
+  getEmployeeProfileId: (): string => {
+    return localStorage.getItem(EMPLOYEE_PROFILE_ID_KEY) || "";
+  },
+
+  clearEmployeeProfileId: (): void => {
+    localStorage.removeItem(EMPLOYEE_PROFILE_ID_KEY);
   },
 
   // Datenschutz-Zustimmung
@@ -327,6 +344,39 @@ export const storage = {
     );
   },
 
+  markWeekPendingBackendSync: (
+    year: number,
+    week: number,
+    sheetId: number = 1,
+  ): void => {
+    localStorage.setItem(
+      `${BACKEND_TIMESHEET_PENDING_PREFIX}${year}_${week}_${sheetId}`,
+      "true",
+    );
+  },
+
+  clearWeekPendingBackendSync: (
+    year: number,
+    week: number,
+    sheetId: number = 1,
+  ): void => {
+    localStorage.removeItem(
+      `${BACKEND_TIMESHEET_PENDING_PREFIX}${year}_${week}_${sheetId}`,
+    );
+  },
+
+  hasWeekPendingBackendSync: (
+    year: number,
+    week: number,
+    sheetId: number = 1,
+  ): boolean => {
+    return (
+      localStorage.getItem(
+        `${BACKEND_TIMESHEET_PENDING_PREFIX}${year}_${week}_${sheetId}`,
+      ) === "true"
+    );
+  },
+
   getRecentCustomers: (
     limit: number = 20,
     additionalWeeks: WeekData[] = [],
@@ -414,7 +464,7 @@ export const storage = {
       }
     }
     // Auch andere App-spezifische Keys
-    keysToRemove.push(LANGUAGE_KEY, NAME_KEY, CONSENT_KEY);
+    keysToRemove.push(LANGUAGE_KEY, NAME_KEY, EMPLOYEE_PROFILE_ID_KEY, CONSENT_KEY);
 
     keysToRemove.forEach((key) => localStorage.removeItem(key));
   },

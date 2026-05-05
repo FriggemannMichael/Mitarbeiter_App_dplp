@@ -288,7 +288,10 @@ def employee_update_phone(request):
 @require_http_methods(['GET'])
 def employee_session(request):
     customer_key = get_employee_request_customer_key(request)
-    profile = get_employee_profile_from_request(request, customer_key)
-    return success_response({
+    profile, token = get_employee_profile_from_request(request, customer_key, return_token=True)
+    response = success_response({
         'employee': serialize_employee_profile(profile) if profile else None,
     })
+    if profile and token:
+        set_employee_session_cookie(response, token)
+    return response

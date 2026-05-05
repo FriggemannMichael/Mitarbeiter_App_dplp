@@ -120,15 +120,41 @@ function AppContent() {
 
     const migrateEmployeeWeeks = async () => {
       try {
-        if (
+        const migrationAlreadyCompleted =
           migratedEmployeeWeeksRef.current === String(employeeId) ||
-          storage.hasCompletedBackendTimesheetMigration(employeeId)
+          storage.hasCompletedBackendTimesheetMigration(employeeId);
+
+        const storedWeeks = storage.getAllStoredWeeks().filter((weekData) => {
+          const localEmployeeId = weekData.employeeId?.trim();
+          if (localEmployeeId) {
+            return localEmployeeId === String(employeeId);
+          }
+          return weekData.employeeName?.trim() === employeeName;
+        });
+
+        const pendingWeeks = storedWeeks.filter((weekData) =>
+          storage.hasWeekPendingBackendSync(
+            weekData.year,
+            weekData.week,
+            weekData.sheetId ?? 1,
+          ),
+        );
+
+        if (
+          migrationAlreadyCompleted &&
+          pendingWeeks.length === 0
         ) {
           migratedEmployeeWeeksRef.current = String(employeeId);
           return;
         }
 
-        if (employeeSession.has_name_duplicates) {
+        const weeksToSync = migrationAlreadyCompleted ? pendingWeeks : storedWeeks;
+
+        const hasAmbiguousWeeks = weeksToSync.some(
+          (weekData) => !weekData.employeeId?.trim(),
+        );
+
+        if (employeeSession.has_name_duplicates && hasAmbiguousWeeks) {
           migratedEmployeeWeeksRef.current = String(employeeId);
           logger.warn(
             "Skipped local timesheet migration because employee name is not unique",
@@ -143,19 +169,24 @@ function AppContent() {
           return;
         }
 
-        const storedWeeks = storage.getAllStoredWeeks().filter(
-          (weekData) => weekData.employeeName?.trim() === employeeName,
-        );
-
         let migratedCount = 0;
-        for (const weekData of storedWeeks) {
+        for (const weekData of weeksToSync) {
           await apiService.saveTimesheet({
-            weekData,
+            weekData: {
+              ...weekData,
+              employeeId: String(employeeId),
+              employeeName,
+            },
             year: weekData.year,
             week: weekData.week,
             sheetId: weekData.sheetId ?? 1,
             displayName: employeeName,
           });
+          storage.clearWeekPendingBackendSync(
+            weekData.year,
+            weekData.week,
+            weekData.sheetId ?? 1,
+          );
           migratedCount += 1;
         }
 
@@ -163,11 +194,12 @@ function AppContent() {
         migratedEmployeeWeeksRef.current = String(employeeId);
 
         if (!isCancelled) {
-          logger.info("Local timesheets migrated to backend", {
+          logger.info("Local timesheets synchronized to backend", {
             component: "App",
             data: {
               employeeName,
               migratedCount,
+              pendingCount: pendingWeeks.length,
             },
           });
         }
@@ -205,6 +237,7 @@ function AppContent() {
 
   const handleEmployeeAuthenticated = (session: EmployeeSessionDto) => {
     storage.setEmployeeName(session.display_name);
+    storage.setEmployeeProfileId(session.id);
     setEmployeeSession(session);
   };
 
@@ -217,6 +250,7 @@ function AppContent() {
 
     migratedEmployeeWeeksRef.current = "";
     storage.clearEmployeeName();
+    storage.clearEmployeeProfileId();
     setEmployeeSession(null);
   };
 
