@@ -14,12 +14,17 @@ def success_response(data=None, status=200):
     }, status=status)
 
 
-def error_response(message, status=400):
-    return JsonResponse({
+def error_response(message, status=400, *, code=None, data=None):
+    payload = {
         'success': False,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'error': message,
-    }, status=status)
+    }
+    if code:
+        payload['code'] = code
+    if data is not None:
+        payload['data'] = data
+    return JsonResponse(payload, status=status)
 
 
 def unauthorized_response(message='Authentication required'):

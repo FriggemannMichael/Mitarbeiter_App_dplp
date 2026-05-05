@@ -1,0 +1,23 @@
+# Standardmäßig LF für alle Textdateien
+* text=auto eol=lf
+
+# Shell-Skripte explizit LF (wichtig für Docker/Linux)
+*.sh text eol=lf
+
+# Windows-spezifische Dateien CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binärdateien nicht anfassen
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text eol=lf
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

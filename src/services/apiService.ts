@@ -10,6 +10,7 @@ import type {
   WorkSettings,
   EmailConfig,
 } from "../types/config.types";
+import type { WeekData } from "../types/weekdata.types";
 
 const DEFAULT_API_BASE_URL =
   typeof window !== "undefined"
@@ -27,6 +28,21 @@ interface ApiResponse<T> {
   data?: T;
   message?: string;
   error?: string;
+  code?: string;
+}
+
+class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  data?: unknown;
+
+  constructor(message: string, status: number, code?: string, data?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
 }
 
 interface LoginResponse {
@@ -36,6 +52,7 @@ interface LoginResponse {
   email: string;
   role?: string;
   customer_key?: string;
+  token?: string;
 }
 
 export interface AccountDto {
@@ -48,13 +65,128 @@ export interface AccountDto {
   updated_at?: string | null;
 }
 
+export interface PortalSummaryDto {
+  current_week: {
+    year: number;
+    week: number;
+  };
+  metrics: {
+    current_week_hours: number;
+    submitted_timesheets: number;
+    missing_timesheets: number;
+    current_absence_days: number;
+    ready_for_approval: number;
+    ready_for_review: number;
+  };
+  missing_employees: string[];
+}
+
+export interface PortalEmployeeDto {
+  employee_name: string;
+  timesheet_count: number;
+  current_week_hours: number;
+  current_absence_days: number;
+  latest_status: string;
+  last_updated_at?: string | null;
+  has_current_week_timesheet: boolean;
+}
+
+export interface PortalTimesheetDto {
+  id: number;
+  employee_name: string;
+  week_year: number;
+  week_number: number;
+  sheet_id: string;
+  customer: string;
+  week_data: WeekData;
+  status: string;
+  portal_queue?: string;
+  workflow_status: string;
+  hours_total: number;
+  absence_days: number;
+  has_signature: boolean;
+  has_employee_signature: boolean;
+  has_supervisor_signature: boolean;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  customer_comment?: string | null;
+  history?: Array<{
+    timestamp: string;
+    action: string;
+    status?: string;
+    actor?: string;
+    actorRole?: string;
+    comment?: string;
+  }>;
+  updated_at?: string | null;
+}
+
+export interface PortalAbsenceDto {
+  timesheet_id: number;
+  employee_name: string;
+  date: string;
+  absence: string;
+  absence_note: string;
+  week_year: number;
+  week_number: number;
+  sheet_id: string;
+  customer: string;
+}
+
+export interface PortalAuditLogDto {
+  id: number;
+  action: string;
+  created_at?: string | null;
+  timesheet_id?: number | null;
+  sheet_id?: string | null;
+  employee_name?: string | null;
+  status?: string | null;
+  comment?: string | null;
+  actor?: string | null;
+  actor_role?: string | null;
+}
+
+export interface EmployeeSessionDto {
+  id: number;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  phone_number: string;
+  has_name_duplicates?: boolean;
+  customer_key: string;
+  last_login_at?: string | null;
+}
+
+interface EmployeeAuthPayload {
+  employee: EmployeeSessionDto;
+  created?: boolean;
+  csrf_token?: string;
+}
+
+export interface TimesheetApiPayload<TWeekData = unknown> {
+  id: number;
+  week_year?: number | null;
+  week_number?: number | null;
+  sheet_id?: string | null;
+  updated_at?: string | null;
+  weekData: TWeekData;
+}
+
 class ApiService {
   private baseUrl: string;
   private customerKey: string;
+  private authToken: string;
+  private employeeCsrfToken: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
     this.customerKey = import.meta.env.VITE_CUSTOMER_KEY || "";
+    this.authToken =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("admin_auth_token") || ""
+        : "";
+    this.employeeCsrfToken = "";
   }
 
   setBaseUrl(baseUrl: string): void {
@@ -77,6 +209,35 @@ class ApiService {
     this.customerKey = (customerKey || "").trim();
   }
 
+  setAuthToken(token: string): void {
+    this.authToken = (token || "").trim();
+  }
+
+  setEmployeeCsrfToken(token: string): void {
+    this.employeeCsrfToken = (token || "").trim();
+  }
+
+  private getCookieValue(name: string): string {
+    if (typeof document === "undefined") {
+      return "";
+    }
+
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${escapedName}=([^;]*)`),
+    );
+
+    if (!match) {
+      return "";
+    }
+
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+
   /**
    * Generische API-Anfrage mit Error-Handling
    */
@@ -94,6 +255,14 @@ class ApiService {
     };
     if (this.customerKey) {
       (defaultHeaders as Record<string, string>)["X-Customer-Key"] = this.customerKey;
+    }
+    if (this.authToken) {
+      (defaultHeaders as Record<string, string>)["Authorization"] = `Bearer ${this.authToken}`;
+    }
+    const employeeCsrfToken =
+      this.employeeCsrfToken || this.getCookieValue("employee_csrf");
+    if (employeeCsrfToken) {
+      (defaultHeaders as Record<string, string>)["X-Employee-CSRF"] = employeeCsrfToken;
     }
 
     const config: RequestInit = {
@@ -118,8 +287,11 @@ class ApiService {
 
       // HTTP-Fehler prüfen
       if (!response.ok) {
-        throw new Error(
+        throw new ApiRequestError(
           data.error || `HTTP ${response.status}: ${response.statusText}`,
+          response.status,
+          data.code,
+          data.data,
         );
       }
 
@@ -214,6 +386,198 @@ class ApiService {
     },
   ): Promise<ApiResponse<AccountDto>> {
     return this.put<AccountDto>(`/api/accounts/${accountId}`, payload);
+  }
+
+  async getPortalSummary(): Promise<ApiResponse<PortalSummaryDto>> {
+    return this.get<PortalSummaryDto>("/api/portal/summary");
+  }
+
+  async getPortalEmployees(): Promise<ApiResponse<PortalEmployeeDto[]>> {
+    return this.get<PortalEmployeeDto[]>("/api/portal/employees");
+  }
+
+  async getPortalTimesheets(params?: {
+    year?: number;
+    week?: number;
+    month?: number;
+    employeeName?: string;
+    status?: string;
+  }): Promise<ApiResponse<PortalTimesheetDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.year != null) search.set("year", String(params.year));
+    if (params?.week != null) search.set("week", String(params.week));
+    if (params?.month != null) search.set("month", String(params.month));
+    if (params?.employeeName) search.set("employeeName", params.employeeName);
+    if (params?.status) search.set("status", params.status);
+    const suffix = search.toString();
+    return this.get<PortalTimesheetDto[]>(
+      `/api/portal/timesheets${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
+  async getPortalAbsences(params?: {
+    employeeName?: string;
+  }): Promise<ApiResponse<PortalAbsenceDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.employeeName) search.set("employeeName", params.employeeName);
+    const suffix = search.toString();
+    return this.get<PortalAbsenceDto[]>(
+      `/api/portal/absences${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
+  async getPortalAuditLog(params?: {
+    timesheetId?: number;
+    limit?: number;
+  }): Promise<ApiResponse<PortalAuditLogDto[]>> {
+    const search = new URLSearchParams();
+    if (params?.timesheetId != null) search.set("timesheetId", String(params.timesheetId));
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    const suffix = search.toString();
+    return this.get<PortalAuditLogDto[]>(
+      `/api/portal/audit-log${suffix ? `?${suffix}` : ""}`,
+    );
+  }
+
+  async updatePortalTimesheetStatus(
+    timesheetId: number,
+    payload: {
+      status: "reviewed" | "approved" | "rejected";
+      rejectionReason?: string;
+      comment?: string;
+    },
+  ): Promise<ApiResponse<PortalTimesheetDto>> {
+    return this.post<PortalTimesheetDto>(
+      `/api/portal/timesheets/${timesheetId}/status`,
+      payload,
+    );
+  }
+
+  async addPortalTimesheetComment(
+    timesheetId: number,
+    payload: {
+      comment: string;
+    },
+  ): Promise<ApiResponse<PortalTimesheetDto>> {
+    return this.post<PortalTimesheetDto>(
+      `/api/portal/timesheets/${timesheetId}/comment`,
+      payload,
+    );
+  }
+
+  async registerEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/register", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async loginEmployee(payload: {
+    firstName: string;
+    lastName: string;
+    pin: string;
+    phoneNumber?: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/login", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async resetEmployeePin(payload: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    const response = await this.post<EmployeeAuthPayload>("/api/employee/reset-pin", payload);
+    if (response.success && response.data?.csrf_token) {
+      this.setEmployeeCsrfToken(response.data.csrf_token);
+    }
+    return response;
+  }
+
+  async updateEmployeePhone(payload: {
+    phoneNumber: string;
+    pin: string;
+  }): Promise<ApiResponse<EmployeeAuthPayload>> {
+    return this.post<EmployeeAuthPayload>("/api/employee/update-phone", payload);
+  }
+
+  async logoutEmployee(): Promise<ApiResponse<null>> {
+    this.setEmployeeCsrfToken("");
+    return this.post<null>("/api/employee/logout", {});
+  }
+
+  async getEmployeeSession(): Promise<ApiResponse<{ employee: EmployeeSessionDto }>> {
+    return this.get<{ employee: EmployeeSessionDto }>("/api/employee/session");
+  }
+
+  async saveTimesheet<TWeekData>(payload: {
+    weekData: TWeekData;
+    year: number;
+    week: number;
+    sheetId?: number | string;
+    displayName?: string;
+  }): Promise<
+    ApiResponse<{
+      id: number;
+      week_year: number;
+      week_number: number;
+      sheet_id: string;
+    }>
+  > {
+    return this.post("/api/save-timesheet", payload);
+  }
+
+  async getTimesheet<TWeekData>(
+    year: number,
+    week: number,
+    sheetId: number | string = 1,
+  ): Promise<ApiResponse<TimesheetApiPayload<TWeekData> | null>> {
+    const search = new URLSearchParams({
+      year: String(year),
+      week: String(week),
+      sheetId: String(sheetId),
+    });
+    return this.get(`/api/get-timesheet?${search.toString()}`);
+  }
+
+  async listTimesheets<TWeekData>(params?: {
+    year?: number;
+    week?: number;
+    limit?: number;
+  }): Promise<ApiResponse<Array<TimesheetApiPayload<TWeekData>>>> {
+    const search = new URLSearchParams();
+    if (params?.year != null) search.set("year", String(params.year));
+    if (params?.week != null) search.set("week", String(params.week));
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    const suffix = search.toString();
+    return this.get(`/api/list-timesheets${suffix ? `?${suffix}` : ""}`);
+  }
+
+  async archiveTimesheet(payload: {
+    year: number;
+    week: number;
+    sheetId?: number | string;
+  }): Promise<
+    ApiResponse<{
+      archived: boolean;
+      already_missing?: boolean;
+      week_year: number;
+      week_number: number;
+      sheet_id: string;
+      archived_at?: string | null;
+    }>
+  > {
+    return this.post("/api/archive-timesheet", payload);
   }
 
   // ==========================================

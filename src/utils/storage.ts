@@ -7,6 +7,7 @@ export type AbsenceType =
   | "flextime"
   | "holiday"
   | "unpaid"
+  | "absent"
   | null;
 
 // Erweiterte Tagesstruktur für einfache Schichtmodelle
@@ -26,6 +27,8 @@ export interface DayData {
   // Abwesenheit: Wenn gesetzt, werden Arbeitszeiten ignoriert
   absence?: AbsenceType;
   absenceNote?: string; // Optional: Notiz zur Abwesenheit (z.B. Attest-Nummer)
+  orderNumber?: string;
+  commission?: string;
 
   // Neue Felder gemäß TIMESHEET-LOGIC-SPEC.json
   customer?: string; // Kunde für diesen spezifischen Tag (überschreibt WeekData.customer)
@@ -95,6 +98,7 @@ const LAST_BACKUP_DATE_KEY = "wpdl_last_backup_date";
 const BACKUP_REMINDER_DISMISSED_KEY = "wpdl_backup_reminder_dismissed";
 const FIRST_USE_DATE_KEY = "wpdl_first_use_date";
 const THEME_KEY = "wpdl_theme";
+const BACKEND_TIMESHEET_MIGRATION_PREFIX = "wpdl_backend_timesheet_migration_v2_";
 
 // Helper Funktionen für localStorage
 export const storage = {
@@ -124,6 +128,10 @@ export const storage = {
 
   getEmployeeName: (): string => {
     return localStorage.getItem(NAME_KEY) || "";
+  },
+
+  clearEmployeeName: (): void => {
+    localStorage.removeItem(NAME_KEY);
   },
 
   // Datenschutz-Zustimmung
@@ -211,6 +219,15 @@ export const storage = {
     return data ? JSON.parse(data) : null;
   },
 
+  removeWeekData: (
+    year: number,
+    week: number,
+    sheetId: number = 1
+  ): void => {
+    const key = `${STORAGE_PREFIX}week_${year}_${week}_sheet_${sheetId}`;
+    localStorage.removeItem(key);
+  },
+
   // Alle Zettel einer Woche laden
   getAllSheetsForWeek: (year: number, week: number): WeekData[] => {
     const sheets: WeekData[] = [];
@@ -262,6 +279,92 @@ export const storage = {
       }
     }
     return keys;
+  },
+
+  getAllStoredWeeks: (): WeekData[] => {
+    const weeks: WeekData[] = [];
+
+    storage.getAllWeekKeys().forEach((key) => {
+      const data = localStorage.getItem(key);
+      if (!data) return;
+
+      try {
+        const parsed = JSON.parse(data) as WeekData;
+        if (
+          parsed &&
+          typeof parsed.year === "number" &&
+          typeof parsed.week === "number" &&
+          typeof parsed.sheetId === "number"
+        ) {
+          weeks.push(parsed);
+        }
+      } catch (error) {
+        console.warn(`Failed to parse stored week for key ${key}:`, error);
+      }
+    });
+
+    return weeks.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      if (a.week !== b.week) return a.week - b.week;
+      return a.sheetId - b.sheetId;
+    });
+  },
+
+  hasCompletedBackendTimesheetMigration: (employeeId: number): boolean => {
+    if (!Number.isFinite(employeeId) || employeeId <= 0) return false;
+    return (
+      localStorage.getItem(
+        `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${employeeId}`,
+      ) === "true"
+    );
+  },
+
+  markBackendTimesheetMigrationComplete: (employeeId: number): void => {
+    if (!Number.isFinite(employeeId) || employeeId <= 0) return;
+    localStorage.setItem(
+      `${BACKEND_TIMESHEET_MIGRATION_PREFIX}${employeeId}`,
+      "true",
+    );
+  },
+
+  getRecentDayFieldValues: (
+    field: "orderNumber" | "commission",
+    limit: number = 20,
+    additionalWeeks: WeekData[] = [],
+  ): string[] => {
+    const valuesWithTimestamp: Array<{ value: string; updatedAt: number }> = [];
+
+    const persistedWeeks = storage.getAllStoredWeeks();
+    const allWeeks = [...persistedWeeks, ...additionalWeeks];
+
+    allWeeks.forEach((weekData) => {
+      const updatedAt = weekData.updatedAt
+        ? new Date(weekData.updatedAt).getTime()
+        : 0;
+
+      weekData.days?.forEach((day) => {
+        const rawValue = day[field];
+        const value =
+          typeof rawValue === "string" ? rawValue.trim() : "";
+
+        if (!value) return;
+
+        valuesWithTimestamp.push({ value, updatedAt });
+      });
+    });
+
+    const latestByValue = new Map<string, number>();
+    valuesWithTimestamp.forEach(({ value, updatedAt }) => {
+      const current = latestByValue.get(value) ?? 0;
+      if (updatedAt >= current) {
+        latestByValue.set(value, updatedAt);
+      }
+    });
+
+    return Array.from(latestByValue.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de"))
+      .slice(0, limit)
+      .map(([value]) => value);
   },
 
   // Alle App-Daten löschen

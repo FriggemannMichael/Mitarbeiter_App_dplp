@@ -17,6 +17,12 @@ import type {
 import { apiService } from "./apiService";
 import { ConfigManager } from "./config/ConfigManager";
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 class ConfigService {
   /**
    * LÃ¤dt Konfiguration via ConfigManager
@@ -38,16 +44,16 @@ class ConfigService {
     try {
       // Immer API-Update versuchen (wird in Admin-Dashboard verwendet)
       try {
-        console.log("ðŸ”µ Updating company config via API...", companyConfig);
+        devLog("ðŸ”µ Updating company config via API...", companyConfig);
         const response = await apiService.updateCompanyConfig(companyConfig);
-        console.log("ðŸ“¡ API response:", response);
+        devLog("ðŸ“¡ API response:", response);
 
         if (!response.success) {
           console.error("âŒ API-Update fehlgeschlagen:", response);
           throw new Error(response.error || "API returned success=false");
         }
 
-        console.log("âœ… API-Update erfolgreich");
+        devLog("âœ… API-Update erfolgreich");
       } catch (apiError) {
         console.error("âŒ API-Update Fehler:", apiError);
         // Re-throw error, damit Admin-Dashboard den Fehler sieht
@@ -85,12 +91,12 @@ class ConfigService {
     try {
       // Immer API-Update versuchen
       try {
-        console.log("ðŸ”µ Updating PDF config via API...");
+        devLog("ðŸ”µ Updating PDF config via API...");
         const response = await apiService.updatePdfConfig(pdfConfig);
         if (!response.success) {
           throw new Error(response.error || "API returned success=false");
         }
-        console.log("âœ… API-Update erfolgreich");
+        devLog("âœ… API-Update erfolgreich");
       } catch (apiError) {
         console.error("âŒ API-Update Fehler:", apiError);
         throw apiError;
@@ -128,14 +134,14 @@ class ConfigService {
     try {
       // Immer API-Update versuchen
       try {
-        console.log("ðŸ”µ Updating technical config via API...");
+        devLog("ðŸ”µ Updating technical config via API...");
         const response = await apiService.updateTechnicalConfig(
           technicalConfig
         );
         if (!response.success) {
           throw new Error(response.error || "API returned success=false");
         }
-        console.log("âœ… API-Update erfolgreich");
+        devLog("âœ… API-Update erfolgreich");
       } catch (apiError) {
         console.error("âŒ API-Update Fehler:", apiError);
         throw apiError;
@@ -173,12 +179,12 @@ class ConfigService {
     try {
       // Immer API-Update versuchen
       try {
-        console.log("ðŸ”µ Updating work settings via API...");
+        devLog("ðŸ”µ Updating work settings via API...");
         const response = await apiService.updateWorkSettings(workSettings);
         if (!response.success) {
           throw new Error(response.error || "API returned success=false");
         }
-        console.log("âœ… API-Update erfolgreich");
+        devLog("âœ… API-Update erfolgreich");
       } catch (apiError) {
         console.error("âŒ API-Update Fehler:", apiError);
         throw apiError;
@@ -216,12 +222,12 @@ class ConfigService {
     try {
       // Immer API-Update versuchen
       try {
-        console.log("ðŸ”µ Updating email config via API...");
+        devLog("ðŸ”µ Updating email config via API...");
         const response = await apiService.updateEmailConfig(emailConfig);
         if (!response.success) {
           throw new Error(response.error || "API returned success=false");
         }
-        console.log("âœ… API-Update erfolgreich");
+        devLog("âœ… API-Update erfolgreich");
       } catch (apiError) {
         console.error("âŒ API-Update Fehler:", apiError);
         throw apiError;

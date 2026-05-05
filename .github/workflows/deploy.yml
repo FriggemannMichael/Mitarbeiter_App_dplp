@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/mitarbeiterapp
+  IMAGE_NAME: ghcr.io/friggemannmichael/mitarbeiterapp
 
 jobs:
   build-backend:
@@ -52,19 +52,22 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Build frontend
         run: npm run build
         env:
           VITE_FORCE_API: true
           VITE_API_URL: ${{ secrets.API_URL }}
+          VITE_COMPANY_CODE: TIMESHEET-PRO-2026
 
       - name: Deploy dist/ via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          local-dir: ./dist/
+        run: |
+          sudo apt-get install -y lftp -q
+          lftp -c "
+          set ftp:passive-mode yes;
+          set ssl:verify-certificate no;
+          open ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_SERVER }};
+          mirror --reverse --delete --verbose dist/ /;
+          bye
+          "

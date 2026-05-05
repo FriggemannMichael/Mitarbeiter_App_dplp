@@ -4,6 +4,7 @@ import bcrypt
 from django.test import TestCase, Client
 
 from api.models import Account
+from api.services.email_service import _generate_customer_timesheet_email, send_pdf
 
 
 class AccountAuthApiTests(TestCase):
@@ -70,3 +71,57 @@ class AccountAuthApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(Account.objects.filter(customer_key=self.customer_key, username='dispatcher1').exists())
+
+
+class EmailTemplateTests(TestCase):
+    def test_customer_timesheet_email_without_supervisor_signature_requests_forwarding(self):
+        subject, body = _generate_customer_timesheet_email(
+            employee_name='Michael Friggemann',
+            week_number='18',
+            week_year='2026',
+            date_range='27.04.2026 - 03.05.2026',
+            admin_email='office@example.com',
+            has_supervisor_signature=False,
+        )
+
+        self.assertEqual(
+            subject,
+            'Stundennachweis KW 18/2026 - Michael Friggemann',
+        )
+        self.assertIn(
+            'Bitte bestaetigen Sie die geleisteten Stunden',
+            body,
+        )
+        self.assertIn(
+            'per Email an office@example.com weiterleiten.',
+            body,
+        )
+        self.assertNotIn('Gesamtstunden:', body)
+        self.assertNotIn('Ihr Mitarbeiter Pro System', body)
+
+    def test_send_pdf_uses_customer_template_without_supervisor_signature(self):
+        result = send_pdf({
+            'pdf_base64': 'JVBERi0xLgo=',
+            'recipient_email': 'kunde@example.com',
+            'document_type': 'timesheet',
+            'employee_name': 'Michael Friggemann',
+            'filename': 'stundennachweis.pdf',
+            'week_number': '18',
+            'week_year': '2026',
+            'date_range': '27.04.2026 - 03.05.2026',
+            'total_hours': '02:45',
+            'has_supervisor_signature': False,
+            'is_customer_recipient': False,
+            'customer_key': 'default',
+        })
+
+        self.assertTrue(result['success'])
+        self.assertEqual(
+            result['data']['subject'],
+            'Stundennachweis KW 18/2026 - Michael Friggemann',
+        )
+        self.assertIn(
+            'Bitte bestaetigen Sie die geleisteten Stunden',
+            result['data']['body'],
+        )
+        self.assertNotIn('Gesamtstunden:', result['data']['body'])

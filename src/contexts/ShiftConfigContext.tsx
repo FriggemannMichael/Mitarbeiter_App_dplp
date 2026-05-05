@@ -34,6 +34,7 @@ interface ShiftConfigContextType {
    * @param config Zeiten-Konfiguration
    * @param selectedDays Optional: Spezifische Tage (0-6), sonst automatisch
    * @param lockedDates Optional: Set von ISO-Datumsstrings, die gesperrt sind
+   * @param activeMonthKey Optional: Monat im Format YYYY-M, auf den die Schicht angewendet werden darf
    * @returns Aktualisierte Wochendaten mit angewandter Schicht
    */
   applyShiftConfig: (
@@ -41,7 +42,8 @@ interface ShiftConfigContextType {
     shiftModel: ShiftModel,
     config: ShiftConfig,
     selectedDays?: number[],
-    lockedDates?: Set<string>
+    lockedDates?: Set<string>,
+    activeMonthKey?: string
   ) => WeekData;
 
   /**
@@ -151,7 +153,8 @@ export const ShiftConfigProvider: React.FC<{ children: React.ReactNode }> = ({
       shiftModel: ShiftModel,
       config: ShiftConfig,
       selectedDays?: number[],
-      lockedDates?: Set<string>
+      lockedDates?: Set<string>,
+      activeMonthKey?: string
     ): WeekData => {
       if (!weekData) {
         throw new Error("Keine Wochendaten vorhanden");
@@ -197,13 +200,12 @@ export const ShiftConfigProvider: React.FC<{ children: React.ReactNode }> = ({
 
         // WICHTIG: Wenn Tag in anderem Monat liegt, nicht überschreiben
         // Dies verhindert Überschreiben bei Wochen die Monatsgrenzen überschreiten (z.B. KW 53)
-        const firstDayDate = new Date(targetDates[0]);
-        const firstDayMonth = firstDayDate.getMonth();
-        const firstDayYear = firstDayDate.getFullYear();
-        const currentDayMonth = dateObj.getMonth();
-        const currentDayYear = dateObj.getFullYear();
+        const allowedMonthKey =
+          activeMonthKey ||
+          `${targetDates[0].getFullYear()}-${targetDates[0].getMonth()}`;
+        const currentMonthKey = `${dateObj.getFullYear()}-${dateObj.getMonth()}`;
 
-        if (currentDayYear !== firstDayYear || currentDayMonth !== firstDayMonth) {
+        if (currentMonthKey !== allowedMonthKey) {
           return baseDay;
         }
 

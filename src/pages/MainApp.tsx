@@ -1,21 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dashboard } from "./Dashboard";
 import { TimesheetHybrid } from "./TimesheetHybrid";
 import { VacationRequestHybrid } from "./VacationRequestHybrid";
 import { AdvancePaymentHybrid } from "./AdvancePaymentHybrid";
 import { useTimesheetActions } from "../contexts/TimesheetActionsContext";
-import { storage } from "../utils/storage";
+import { useConfig } from "../contexts/ConfigContext";
+import { isFeatureEnabled } from "../utils/featureFlags";
 import { logger } from "../services/logger";
 import { Home, ClipboardList, Plus, Palmtree, Euro } from "lucide-react";
 
 type TabType = "dashboard" | "timesheet" | "vacation" | "advancePayment";
 
 interface MainAppProps {
+  employeeName: string;
   onLogout: () => void;
 }
 
-export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
+export const MainApp: React.FC<MainAppProps> = ({ employeeName, onLogout }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [selectedWeek, setSelectedWeek] = useState<{
@@ -24,8 +26,27 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
     sheetId?: number;
   } | null>(null);
 
-  const employeeName = storage.getEmployeeName();
   const { createNewSheet } = useTimesheetActions();
+  const { config } = useConfig();
+  const vacationEnabled = isFeatureEnabled(
+    config?.technical,
+    "vacation_enabled",
+    true
+  );
+  const advancePaymentEnabled = isFeatureEnabled(
+    config?.technical,
+    "advance_payment_enabled",
+    true
+  );
+
+  useEffect(() => {
+    if (!vacationEnabled && activeTab === "vacation") {
+      setActiveTab("dashboard");
+    }
+    if (!advancePaymentEnabled && activeTab === "advancePayment") {
+      setActiveTab("dashboard");
+    }
+  }, [activeTab, advancePaymentEnabled, vacationEnabled]);
 
   // Debug: Mitarbeitername überprüfen
   logger.debug('Employee name loaded', {
@@ -55,11 +76,19 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
   };
 
   const handleNavigateToVacation = () => {
+    if (!vacationEnabled) {
+      setActiveTab("dashboard");
+      return;
+    }
     setActiveTab("vacation");
     setSelectedWeek(null);
   };
 
   const handleNavigateToAdvancePayment = () => {
+    if (!advancePaymentEnabled) {
+      setActiveTab("dashboard");
+      return;
+    }
     setActiveTab("advancePayment");
     setSelectedWeek(null);
   };
@@ -89,10 +118,10 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
           initialWeek={selectedWeek}
         />
       )}
-      {activeTab === "vacation" && (
+      {vacationEnabled && activeTab === "vacation" && (
         <VacationRequestHybrid employeeName={employeeName} />
       )}
-      {activeTab === "advancePayment" && (
+      {advancePaymentEnabled && activeTab === "advancePayment" && (
         <AdvancePaymentHybrid employeeName={employeeName} />
       )}
 
@@ -101,7 +130,15 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
         <div className="max-w-2xl mx-auto px-4 py-3">
           {/* Dashboard: 4 Buttons (Übersicht, Stunden, Urlaub, Vorschuss) */}
           {activeTab === "dashboard" && (
-            <div className="grid grid-cols-4 gap-2">
+            <div
+              className={`grid ${
+                vacationEnabled && advancePaymentEnabled
+                  ? "grid-cols-4"
+                  : vacationEnabled || advancePaymentEnabled
+                    ? "grid-cols-3"
+                    : "grid-cols-2"
+              } gap-2`}
+            >
               <button
                 onClick={handleNavigateToDashboard}
                 className="app-nav-btn app-nav-btn-active flex flex-col items-center justify-center py-3 px-3 rounded-xl font-semibold transition-colors bg-primary-50 text-primary-700 border border-primary-200"
@@ -118,22 +155,26 @@ export const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
                 <ClipboardList className="mb-1 w-6 h-6" />
                 <span className="text-xs">{t("nav.timesheet")}</span>
               </button>
-              <button
-                onClick={handleNavigateToVacation}
-                className="app-nav-btn flex flex-col items-center justify-center py-3 px-3 rounded-xl font-semibold transition-colors bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                aria-label={t("tabs.vacation")}
-              >
-                <Palmtree className="mb-1 w-6 h-6" />
-                <span className="text-xs">{t("nav.vacation")}</span>
-              </button>
-              <button
-                onClick={handleNavigateToAdvancePayment}
-                className="app-nav-btn flex flex-col items-center justify-center py-3 px-3 rounded-xl font-semibold transition-colors bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                aria-label={t("tabs.advancePayment")}
-              >
-                <Euro className="mb-1 w-6 h-6" />
-                <span className="text-xs">{t("nav.advance")}</span>
-              </button>
+              {vacationEnabled && (
+                <button
+                  onClick={handleNavigateToVacation}
+                  className="app-nav-btn flex flex-col items-center justify-center py-3 px-3 rounded-xl font-semibold transition-colors bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  aria-label={t("tabs.vacation")}
+                >
+                  <Palmtree className="mb-1 w-6 h-6" />
+                  <span className="text-xs">{t("nav.vacation")}</span>
+                </button>
+              )}
+              {advancePaymentEnabled && (
+                <button
+                  onClick={handleNavigateToAdvancePayment}
+                  className="app-nav-btn flex flex-col items-center justify-center py-3 px-3 rounded-xl font-semibold transition-colors bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  aria-label={t("tabs.advancePayment")}
+                >
+                  <Euro className="mb-1 w-6 h-6" />
+                  <span className="text-xs">{t("nav.advance")}</span>
+                </button>
+              )}
             </div>
           )}
 

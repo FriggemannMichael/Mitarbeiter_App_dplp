@@ -33,6 +33,8 @@ import React, {
 } from "react";
 import type { WeekData, DayData, WeekStats } from "../types/weekdata.types";
 import { storage, weekUtils } from "../utils/storage";
+import { apiService } from "../services/apiService";
+import { useConfig } from "./ConfigContext";
 import {
   migrateWeekDataComplete,
   needsMigration,
@@ -44,6 +46,67 @@ import {
 import { useTimeCalculation } from "./TimeCalculationContext";
 import { useSignatureWorkflow } from "./SignatureWorkflowContext";
 import { useShiftConfig, type ShiftConfig } from "./ShiftConfigContext";
+
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
+const getMonthKey = (date: string): string => {
+  const [year, month] = date.split("-").map(Number);
+  return `${year}-${month - 1}`;
+};
+
+const hasDayEntry = (day: DayData): boolean => {
+  const hasWorkTime = Boolean(day.from && day.to && day.decimal !== "0.00");
+  const hasAbsence = Boolean(day.absence);
+  return hasWorkTime || hasAbsence;
+};
+
+const getActiveMonthKeyForSheet = (
+  week: WeekData,
+  otherSheets: WeekData[],
+): string => {
+  const fallbackMonthKey = week.days[0] ? getMonthKey(week.days[0].date) : "";
+  const firstUsedDay = week.days.find(hasDayEntry);
+
+  if (firstUsedDay) {
+    return getMonthKey(firstUsedDay.date);
+  }
+
+  const usedDatesInOtherSheets = new Set<string>();
+  otherSheets.forEach((sheet) => {
+    sheet.days.forEach((day) => {
+      if (hasDayEntry(day)) {
+        usedDatesInOtherSheets.add(day.date);
+      }
+    });
+  });
+
+  if (usedDatesInOtherSheets.size === 0) {
+    return fallbackMonthKey;
+  }
+
+  const freeDaysByMonth = new Map<string, number>();
+  week.days.forEach((day) => {
+    if (!usedDatesInOtherSheets.has(day.date)) {
+      const monthKey = getMonthKey(day.date);
+      freeDaysByMonth.set(monthKey, (freeDaysByMonth.get(monthKey) || 0) + 1);
+    }
+  });
+
+  let activeMonthKey = fallbackMonthKey;
+  let highestFreeDayCount = -1;
+  freeDaysByMonth.forEach((freeDayCount, monthKey) => {
+    if (freeDayCount > highestFreeDayCount) {
+      activeMonthKey = monthKey;
+      highestFreeDayCount = freeDayCount;
+    }
+  });
+
+  return activeMonthKey;
+};
 
 interface WeekDataContextType {
   // State
@@ -118,6 +181,7 @@ const WeekDataContext = createContext<WeekDataContextType | undefined>(
 export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { isLoading: isConfigLoading } = useConfig();
   // INJECTED CONTEXTS
   const timeCalc = useTimeCalculation();
   const signatureWorkflow = useSignatureWorkflow();
@@ -138,6 +202,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   // BroadcastChannel für Tab-Sync
   const channelRef = useRef<BroadcastChannel | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentWeekRef = useRef<WeekData | null>(null);
 
   // BroadcastChannel Setup
   useEffect(() => {
@@ -186,6 +251,24 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+  useEffect(() => {
+    currentWeekRef.current = currentWeek;
+  }, [currentWeek]);
+
+  const syncWeekToBackend = useCallback(async (weekData: WeekData) => {
+    try {
+      await apiService.saveTimesheet({
+        weekData,
+        year: weekData.year,
+        week: weekData.week,
+        sheetId: weekData.sheetId ?? 1,
+        displayName: weekData.employeeName,
+      });
+    } catch (error) {
+      devLog("[WeekDataContext] Backend sync skipped/failed", error);
+    }
+  }, []);
+
   /**
    * Helper: Erstelle leere Woche
    */
@@ -226,6 +309,30 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  useEffect(() => {
+    return () => {
+      if (!saveTimerRef.current || !currentWeekRef.current) {
+        return;
+      }
+
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+
+      const recalculatedWeek = timeCalc.recalculateWeekData(currentWeekRef.current);
+      const weekToSave = {
+        ...recalculatedWeek,
+        sheetId: recalculatedWeek.sheetId ?? 1,
+      };
+
+      storage.setWeekData(
+        weekToSave.year,
+        weekToSave.week,
+        weekToSave as import("../utils/storage").WeekData,
+        weekToSave.sheetId,
+      );
+    };
+  }, [timeCalc]);
+
   /**
    * Helper: Speichert Wochendaten (DRY - Don't Repeat Yourself)
    * Reduziert Code-Duplikation von ~60 Zeilen auf zentrale Funktion
@@ -256,9 +363,11 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         data: weekToSave,
       });
 
+      void syncWeekToBackend(weekToSave);
+
       return weekToSave;
     },
-    [timeCalc],
+    [syncWeekToBackend, timeCalc],
   );
 
   /**
@@ -295,7 +404,49 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const sheets = storage.getAllSheetsForWeek(year, week);
         setAllSheets(sheets as WeekData[]);
 
-        let data = storage.getWeekData(year, week, sheetId) as WeekData | null;
+        let data: WeekData | null = null;
+        let backendSheets: WeekData[] = [];
+
+        if (!isConfigLoading) {
+          try {
+          const listResponse = await apiService.listTimesheets<WeekData>({
+            year,
+            week,
+          });
+          if (listResponse.success && Array.isArray(listResponse.data)) {
+            backendSheets = listResponse.data
+              .map((item) => item.weekData)
+              .filter((weekData): weekData is WeekData => Boolean(weekData));
+
+            backendSheets.forEach((sheet) => {
+              storage.setWeekData(
+                sheet.year,
+                sheet.week,
+                sheet as import("../utils/storage").WeekData,
+                sheet.sheetId ?? 1,
+              );
+            });
+          }
+
+          const response = await apiService.getTimesheet<WeekData>(year, week, sheetId);
+          const backendWeekData = response.data?.weekData;
+          if (response.success && backendWeekData) {
+            data = backendWeekData;
+            storage.setWeekData(
+              year,
+              week,
+              data as import("../utils/storage").WeekData,
+              sheetId,
+            );
+          }
+          } catch (error) {
+            devLog("[WeekDataContext] Backend load failed, fallback to localStorage", error);
+          }
+        }
+
+        if (!data) {
+          data = storage.getWeekData(year, week, sheetId) as WeekData | null;
+        }
 
         if (!data) {
           data = createEmptyWeek(year, week, sheetId);
@@ -325,6 +476,11 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
 
+        const refreshedSheets =
+          backendSheets.length > 0
+            ? backendSheets.sort((a, b) => (a.sheetId ?? 1) - (b.sheetId ?? 1))
+            : storage.getAllSheetsForWeek(year, week);
+        setAllSheets(refreshedSheets as WeekData[]);
         setCurrentWeek(data as WeekData);
         setCurrentWeekInfo({ year, week });
         setCurrentSheetId(sheetId);
@@ -335,16 +491,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsLoading(false);
       }
     },
-    [createEmptyWeek, shiftConfig],
+    [createEmptyWeek, isConfigLoading, shiftConfig],
   );
-
-  /**
-   * Auto-Navigation: Beim ersten Laden automatisch zur aktuellen Woche navigieren
-   */
-  useEffect(() => {
-    const current = weekUtils.getCurrentWeek();
-    loadWeek(current.year, current.week, 1);
-  }, []); // Nur beim ersten Mount ausführen
 
   /**
    * Speichert aktuelle Woche
@@ -378,8 +526,17 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteWeek = useCallback(
     async (year: number, week: number, sheetId: number = 1) => {
       try {
-        const weekKey = `week_${year}_${week}_${sheetId}`;
-        localStorage.removeItem(weekKey);
+        const archiveResponse = await apiService.archiveTimesheet({
+          year,
+          week,
+          sheetId,
+        });
+
+        if (!archiveResponse.success) {
+          throw new Error(archiveResponse.error || "Archivierung fehlgeschlagen");
+        }
+
+        storage.removeWeekData(year, week, sheetId);
 
         if (
           currentWeek?.year === year &&
@@ -394,11 +551,21 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           data: { year, week, sheetId },
         });
 
-        const sheets = storage.getAllSheetsForWeek(year, week);
-        setAllSheets(sheets as WeekData[]);
+        const listResponse = await apiService.listTimesheets<WeekData>({
+          year,
+          week,
+        });
+        const remainingSheets =
+          listResponse.success && Array.isArray(listResponse.data)
+            ? listResponse.data
+                .map((item) => item.weekData)
+                .filter((weekData): weekData is WeekData => Boolean(weekData))
+                .sort((a, b) => (a.sheetId ?? 1) - (b.sheetId ?? 1))
+            : storage.getAllSheetsForWeek(year, week);
+        setAllSheets(remainingSheets as WeekData[]);
       } catch (err: any) {
-        console.error("Fehler beim Löschen:", err);
-        setError(err.message || "Fehler beim Löschen");
+        console.error("Fehler beim Archivieren:", err);
+        setError(err.message || "Fehler beim Archivieren");
       }
     },
     [currentWeek],
@@ -505,6 +672,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         decimal: "0.00",
         absence: null,
         absenceNote: "",
+        orderNumber: "",
+        commission: "",
         isNightShift: false,
         nightShiftEndDate: "",
         note: "",
@@ -542,6 +711,8 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
               hours: "00:00",
               decimal: "0.00",
               absence: null,
+              orderNumber: "",
+              commission: "",
               isNightShift: false,
               note: undefined,
             }
@@ -637,7 +808,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const weekToSave = saveWeekData(updatedWeek);
         setCurrentWeek(weekToSave);
 
-        console.log(`[WeekDataContext] Unterschrift (${type}) gespeichert`);
+        devLog(`[WeekDataContext] Unterschrift (${type}) gespeichert`);
       } catch (error) {
         console.error("Fehler beim Unterschreiben:", error);
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
@@ -666,7 +837,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const weekToSave = saveWeekData(updatedWeek);
         setCurrentWeek(weekToSave);
 
-        console.log(`[WeekDataContext] Unterschrift (${type}) gelöscht`);
+        devLog(`[WeekDataContext] Unterschrift (${type}) gelöscht`);
       } catch (error) {
         console.error("Fehler beim Löschen der Unterschrift:", error);
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
@@ -804,13 +975,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       if (sheet.sheetId === currentSheetId) return;
 
       sheet.days.forEach((day) => {
-        // Tag ist "verwendet" wenn:
-        // 1. Arbeitszeit eingetragen ist (from, to, decimal > 0)
-        // 2. ODER Abwesenheit markiert ist (Krank, Urlaub, Feiertag, etc.)
-        const hasWorkTime = day.from && day.to && day.decimal !== "0.00";
-        const hasAbsence = day.absence && day.absence !== null;
-
-        if (hasWorkTime || hasAbsence) {
+        if (hasDayEntry(day)) {
           usedDates.add(day.date);
         }
       });
@@ -833,6 +998,13 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         // Hole gesperrte Tage aus anderen Sheets
         const lockedDates = getUsedDaysInOtherSheets();
+        const otherSheets = allSheets.filter(
+          (sheet) => sheet.sheetId !== currentSheetId,
+        );
+        const activeMonthKey = getActiveMonthKeyForSheet(
+          currentWeek,
+          otherSheets,
+        );
 
         // Delegiere an ShiftConfigContext mit gesperrten Tagen
         const updatedWeek = shiftConfig.applyShiftConfig(
@@ -841,6 +1013,7 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
           config,
           selectedDays,
           lockedDates,
+          activeMonthKey,
         );
 
         setCurrentWeek(updatedWeek);
@@ -849,7 +1022,13 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
         setError(error instanceof Error ? error.message : "Unbekannter Fehler");
       }
     },
-    [currentWeek, shiftConfig, getUsedDaysInOtherSheets],
+    [
+      currentWeek,
+      shiftConfig,
+      getUsedDaysInOtherSheets,
+      allSheets,
+      currentSheetId,
+    ],
   );
 
   const isDayEditable = useCallback(
@@ -866,39 +1045,22 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Monatsübergreifende Tage: Bestimme den "Haupt-Monat" des Sheets
-      // Der Haupt-Monat ist der Monat, in dem die meisten Tage der Woche liegen
-      const dayDate = new Date(day.date);
-      const dayMonth = dayDate.getMonth();
-      const dayYear = dayDate.getFullYear();
-
-      // Zähle Tage pro Monat in dieser Woche
-      const monthCounts = new Map<string, number>();
-      currentWeek.days.forEach((d) => {
-        const date = new Date(d.date);
-        const key = `${date.getFullYear()}-${date.getMonth()}`;
-        monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
-      });
-
-      // Finde den Monat mit den meisten Tagen
-      let primaryMonth = "";
-      let maxCount = 0;
-      monthCounts.forEach((count, key) => {
-        if (count > maxCount) {
-          maxCount = count;
-          primaryMonth = key;
-        }
-      });
-
-      const currentDayKey = `${dayYear}-${dayMonth}`;
+      // Der Haupt-Monat ist der Monat des ersten Wochentags (Montag),
+      // nicht der Monat mit den meisten Tagen – sonst werden die letzten
+      // Märztage in der KW gesperrt, die mit 30./31.03 beginnt.
+      const otherSheets = allSheets.filter(
+        (sheet) => sheet.sheetId !== currentSheetId,
+      );
+      const activeMonthKey = getActiveMonthKeyForSheet(currentWeek, otherSheets);
 
       // Tag ist nur bearbeitbar, wenn er zum Haupt-Monat gehört
-      if (currentDayKey !== primaryMonth) {
+      if (getMonthKey(day.date) !== activeMonthKey) {
         return false;
       }
 
       return checkDayEditable(day, currentWeek.status);
     },
-    [currentWeek, getUsedDaysInOtherSheets],
+    [currentWeek, getUsedDaysInOtherSheets, allSheets, currentSheetId],
   );
 
   const isEditable = currentWeek ? checkWeekEditable(currentWeek) : false;
@@ -919,20 +1081,14 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
       const day = currentWeek.days[dayIndex];
       if (!day) return false;
 
-      // Hole Monat und Jahr des Tages
-      const dayDate = new Date(day.date);
-      const dayMonth = dayDate.getMonth();
-      const dayYear = dayDate.getFullYear();
+      const otherSheets = allSheets.filter(
+        (sheet) => sheet.sheetId !== currentSheetId,
+      );
+      const activeMonthKey = getActiveMonthKeyForSheet(currentWeek, otherSheets);
 
-      // Hole Monat und Jahr des ersten Tages der Woche
-      const firstDayDate = new Date(currentWeek.days[0].date);
-      const firstDayMonth = firstDayDate.getMonth();
-      const firstDayYear = firstDayDate.getFullYear();
-
-      // Tag liegt in anderem Monat wenn Jahr oder Monat unterschiedlich sind
-      return dayYear !== firstDayYear || dayMonth !== firstDayMonth;
+      return getMonthKey(day.date) !== activeMonthKey;
     },
-    [currentWeek],
+    [currentWeek, allSheets, currentSheetId],
   );
 
   /**
@@ -948,16 +1104,19 @@ export const WeekDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Initial Load
   useEffect(() => {
+    if (isConfigLoading) {
+      return;
+    }
+
     const loadInitialWeek = async () => {
       const systemWeek = weekUtils.getCurrentWeek();
-      console.log("[WeekDataContext] Initial Load - System-Woche:", systemWeek);
+      devLog("[WeekDataContext] Initial Load - System-Woche:", systemWeek);
       setCurrentWeekInfo(systemWeek);
       await loadWeek(systemWeek.year, systemWeek.week, 1);
     };
 
     loadInitialWeek();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isConfigLoading, loadWeek]);
 
   const value: WeekDataContextType = {
     currentWeek,

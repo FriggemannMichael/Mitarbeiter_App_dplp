@@ -1,0 +1,60 @@
+{
+  "company": {
+    "company_name": "Ihre Firma GmbH",
+    "company_address": "Musterstraße 1, 12345 Musterstadt",
+    "company_phone": "+49 000 000000",
+    "company_email": "info@ihre-firma.de",
+    "company_logo": "",
+    "primary_color": "#1976d2",
+    "theme_color": "#1976d2",
+    "allowed_emails": [],
+    "allowed_whatsapp": [],
+    "default_email": "",
+    "default_whatsapp": ""
+  },
+  "pdf": {
+    "app_name": "Mitarbeiter App",
+    "app_short_name": "Mitarbeiter",
+    "pdf_title_prefix": "Stundennachweis",
+    "pdf_author": "Mitarbeiter App",
+    "pdf_footer_text": "Erstellt mit Mitarbeiter App",
+    "timesheet_header": "STUNDENNACHWEIS",
+    "advance_payment_header": "VORSCHUSSANTRAG",
+    "vacation_header": "URLAUBSANTRAG",
+    "signature_label": "Vorgesetzter",
+    "legal_notice_timesheet": "",
+    "legal_notice_advance_payment": "",
+    "legal_notice_vacation": "",
+    "qr_code_app_identifier": "Mitarbeiter App"
+  },
+  "technical": {
+    "customer_key": "default",
+    "api_endpoint": "/backend",
+    "deployment_path": "/",
+    "qr_code_type_timesheet": "TIMESHEET",
+    "qr_code_type_advance_payment": "ADVANCE_PAYMENT",
+    "qr_code_type_vacation": "VACATION_REQUEST",
+    "enable_whatsapp": false,
+    "enable_email": true,
+    "pwa_qr_code_url": "",
+    "app_domain": "",
+    "backend_domain": "",
+    "whatsapp_base_url": "https://wa.me/",
+    "cors_allowed_origins": [],
+    "pdf_api_key": "",
+    "feature_flags": {}
+  },
+  "work": {
+    "max_work_hours_per_day": 12,
+    "default_break_minutes": 60,
+    "filename_pattern": "Stundennachweis_{employeeName}_{weekYear}_KW{weekNumber}",
+    "auto_save_enabled": true,
+    "offline_mode_enabled": true,
+    "auto_logout_minutes": 240,
+    "backup_reminder_days": 7,
+    "enable_signature_requirement": true,
+    "enable_photo_upload": false,
+    "date_format": "DD.MM.YYYY",
+    "time_format": "HH:mm"
+  }
+}
