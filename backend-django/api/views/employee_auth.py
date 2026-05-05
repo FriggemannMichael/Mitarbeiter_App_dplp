@@ -289,8 +289,6 @@ def employee_update_phone(request):
 def employee_session(request):
     customer_key = get_employee_request_customer_key(request)
     profile = get_employee_profile_from_request(request, customer_key)
-    if not profile:
-        return unauthorized_response('Mitarbeiter nicht angemeldet')
     return success_response({
-        'employee': serialize_employee_profile(profile),
+        'employee': serialize_employee_profile(profile) if profile else None,
     })

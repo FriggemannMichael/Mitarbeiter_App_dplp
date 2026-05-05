@@ -164,6 +164,10 @@ interface EmployeeAuthPayload {
   csrf_token?: string;
 }
 
+interface EmployeeSessionPayload {
+  employee: EmployeeSessionDto | null;
+}
+
 export interface TimesheetApiPayload<TWeekData = unknown> {
   id: number;
   week_year?: number | null;
@@ -526,8 +530,8 @@ class ApiService {
     return this.post<null>("/api/employee/logout", {});
   }
 
-  async getEmployeeSession(): Promise<ApiResponse<{ employee: EmployeeSessionDto }>> {
-    return this.get<{ employee: EmployeeSessionDto }>("/api/employee/session");
+  async getEmployeeSession(): Promise<ApiResponse<EmployeeSessionPayload>> {
+    return this.get<EmployeeSessionPayload>("/api/employee/session");
   }
 
   async saveTimesheet<TWeekData>(payload: {
