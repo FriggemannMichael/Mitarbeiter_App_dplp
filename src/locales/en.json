@@ -460,6 +460,5 @@
   "welcome.error.register": "Registration failed",
   "welcome.error.login": "Login failed",
   "welcome.error.resetPin": "PIN could not be reset",
-  "welcome.error.generic": "Action could not be completed",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Action could not be completed"
 }

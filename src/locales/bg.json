@@ -410,7 +410,7 @@
   "welcome.placeholders.firstName": "Име",
   "welcome.placeholders.lastName": "Иванов",
   "welcome.privacy.text": "Вашите данни се съхраняват за вход, работни листа и одобрения в приложението и системата.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Отвори информацията за поверителност",
   "welcome.privacy.title": "Поверителност и съхранение на данни",
   "welcome.subtitle": "Мобилно проследяване на работното време за служители",
   "welcome.title": "WPDL Работен график",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Регистрацията не бе успешна",
   "welcome.error.login": "Входът не бе успешен",
   "welcome.error.resetPin": "PIN не можа да бъде нулиран",
-  "welcome.error.generic": "Действието не можа да бъде изпълнено",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Действието не можа да бъде изпълнено"
 }

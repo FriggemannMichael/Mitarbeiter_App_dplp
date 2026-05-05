@@ -460,6 +460,5 @@
   "welcome.error.register": "فشل التسجيل",
   "welcome.error.login": "فشل تسجيل الدخول",
   "welcome.error.resetPin": "تعذر إعادة تعيين PIN",
-  "welcome.error.generic": "تعذر إكمال الإجراء",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "تعذر إكمال الإجراء"
 }

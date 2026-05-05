@@ -237,7 +237,7 @@
   "welcome.placeholders.firstName": "Ім'я",
   "welcome.placeholders.lastName": "Петренко",
   "welcome.privacy.text": "Ваші дані зберігаються для входу, табелів та підтверджень у додатку та системі.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Відкрити інформацію про конфіденційність",
   "welcome.privacy.title": "Конфіденційність і зберігання даних",
   "welcome.subtitle": "Мобільний облік часу для співробітників",
   "welcome.title": "WPDL Табель обліку робочого часу",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Реєстрація не вдалася",
   "welcome.error.login": "Вхід не вдався",
   "welcome.error.resetPin": "Не вдалося скинути PIN",
-  "welcome.error.generic": "Дію не вдалося виконати",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Дію не вдалося виконати"
 }

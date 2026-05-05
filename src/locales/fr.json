@@ -387,7 +387,7 @@
   "welcome.placeholders.firstName": "Prénom",
   "welcome.placeholders.lastName": "Dupont",
   "welcome.privacy.text": "Vos données sont stockées pour la connexion, les feuilles de temps et les approbations dans l'application et le système.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Ouvrir les informations de confidentialité",
   "welcome.privacy.title": "Confidentialité et stockage des données",
   "welcome.subtitle": "Suivi du temps mobile pour les employés",
   "welcome.title": "Feuille de temps",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Inscription échouée",
   "welcome.error.login": "Connexion échouée",
   "welcome.error.resetPin": "Impossible de réinitialiser le PIN",
-  "welcome.error.generic": "Action impossible à effectuer",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Action impossible à effectuer"
 }

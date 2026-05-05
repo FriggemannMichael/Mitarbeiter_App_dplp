@@ -238,7 +238,7 @@
   "welcome.placeholders.firstName": "Ion",
   "welcome.placeholders.lastName": "Popescu",
   "welcome.privacy.text": "Datele dvs. sunt stocate pentru autentificare, pontaje și aprobări în aplicație și sistem.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Deschide informațiile de confidențialitate",
   "welcome.privacy.title": "Confidențialitate și stocare date",
   "welcome.subtitle": "Urmărire timp mobilă pentru angajați",
   "welcome.title": "WPDL Pontaj",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Înregistrarea a eșuat",
   "welcome.error.login": "Autentificarea a eșuat",
   "welcome.error.resetPin": "PIN-ul nu a putut fi resetat",
-  "welcome.error.generic": "Acțiunea nu a putut fi finalizată",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Acțiunea nu a putut fi finalizată"
 }

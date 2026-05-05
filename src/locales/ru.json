@@ -387,7 +387,7 @@
   "welcome.placeholders.firstName": "Имя",
   "welcome.placeholders.lastName": "Иванов",
   "welcome.privacy.text": "Ваши данные хранятся для входа, табелей и согласований в приложении и системе.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Открыть информацию о конфиденциальности",
   "welcome.privacy.title": "Конфиденциальность и хранение данных",
   "welcome.subtitle": "Мобильный учёт времени для сотрудников",
   "welcome.title": "Табель учёта рабочего времени",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Регистрация не удалась",
   "welcome.error.login": "Вход не удался",
   "welcome.error.resetPin": "Не удалось сбросить PIN",
-  "welcome.error.generic": "Действие не удалось выполнить",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Действие не удалось выполнить"
 }

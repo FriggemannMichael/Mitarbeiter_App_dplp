@@ -387,7 +387,7 @@
   "welcome.placeholders.firstName": "Imię",
   "welcome.placeholders.lastName": "Kowalski",
   "welcome.privacy.text": "Twoje dane są przechowywane do logowania, kart czasu pracy i zatwierdzeń w aplikacji i systemie.",
-  "welcome.privacy.link": "Open privacy information",
+  "welcome.privacy.link": "Otwórz informacje o prywatności",
   "welcome.privacy.title": "Prywatność i przechowywanie danych",
   "welcome.subtitle": "Mobilne śledzenie czasu dla pracowników",
   "welcome.title": "Karta czasu pracy",
@@ -460,6 +460,5 @@
   "welcome.error.register": "Rejestracja nie powiodła się",
   "welcome.error.login": "Logowanie nie powiodło się",
   "welcome.error.resetPin": "Nie można zresetować PIN-u",
-  "welcome.error.generic": "Nie można wykonać akcji",
-  "welcome.privacy.link": "Datenschutzhinweise öffnen"
+  "welcome.error.generic": "Nie można wykonać akcji"
 }
