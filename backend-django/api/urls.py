@@ -11,7 +11,6 @@ from api.views.employee_auth import (
 )
 from api.views.config import app_config, admin_config, save_admin_config, change_password
 from api.views.accounts import list_accounts, create_account, update_account
-from api.views.employee_device import init_employee_device
 from api.views.users import save_user, get_user
 from api.views.timesheets import save_timesheet, get_timesheet, list_timesheets, archive_timesheet
 from api.views.email import test_email, send_pdf_view
@@ -46,7 +45,6 @@ urlpatterns = [
     path('api/accounts', list_accounts),
     path('api/accounts/create', create_account),
     path('api/accounts/<int:account_id>', update_account),
-    path('api/employee-device/init', init_employee_device),
     path('api/employee/register', employee_register),
     path('api/employee/login', employee_login),
     path('api/employee/logout', employee_logout),

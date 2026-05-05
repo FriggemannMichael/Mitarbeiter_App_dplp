@@ -17,8 +17,6 @@ vi.mock("../services/apiService", () => ({
     getTimesheet: vi.fn(),
     saveTimesheet: vi.fn(),
     archiveTimesheet: vi.fn(),
-    initEmployeeDevice: vi.fn(),
-    canUseEmployeeTimesheetSync: vi.fn(() => true),
   },
 }));
 
@@ -142,12 +140,6 @@ describe("Employee timesheet backend flow", () => {
 
     // Restore default mock implementations after clearAllMocks
     vi.mocked(apiService.saveTimesheet).mockResolvedValue({ success: true, timestamp: new Date().toISOString(), data: undefined });
-    vi.mocked(apiService.initEmployeeDevice).mockResolvedValue({
-      success: true,
-      timestamp: new Date().toISOString(),
-      data: { device: { id: 1, display_name: "Max Mustermann", is_active: true }, created: false },
-    });
-
     // configurable: true is required so each beforeEach can redefine it
     Object.defineProperty(window, "BroadcastChannel", {
       writable: true,
