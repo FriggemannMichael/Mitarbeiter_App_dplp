@@ -43,7 +43,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const defaultLogoSrc = `${import.meta.env.BASE_URL}customers/DPL%20Logo.svg`;
   const privacyPolicyUrl = "https://www.dplp.de/datenschutz/";
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
-  const [mode, setMode] = useState<WelcomeMode>("register");
+  const [mode, setMode] = useState<WelcomeMode>("login");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
