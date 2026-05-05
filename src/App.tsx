@@ -257,26 +257,26 @@ function AppContent() {
 
   return (
     <ErrorBoundary>
-      <AppProviders>
-        <div className="App">
-          <ToastContainer
-            notifications={notifications}
-            onClose={removeNotification}
-          />
-          <OfflineIndicator />
-          <UpdateNotification />
-          {employeeSession ? (
+      <div className="App">
+        <ToastContainer
+          notifications={notifications}
+          onClose={removeNotification}
+        />
+        <OfflineIndicator />
+        <UpdateNotification />
+        {employeeSession ? (
+          <AppProviders>
             <MainApp
               employeeName={employeeSession.display_name}
               onLogout={() => {
                 void handleLogout();
               }}
             />
-          ) : (
-            <Welcome onAuthenticated={handleEmployeeAuthenticated} />
-          )}
-        </div>
-      </AppProviders>
+          </AppProviders>
+        ) : (
+          <Welcome onAuthenticated={handleEmployeeAuthenticated} />
+        )}
+      </div>
     </ErrorBoundary>
   );
 }
