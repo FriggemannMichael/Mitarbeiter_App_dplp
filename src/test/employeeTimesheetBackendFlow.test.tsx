@@ -207,7 +207,7 @@ describe("Employee timesheet backend flow", () => {
     unmount();
   });
 
-  it("verwendet bei leerem Backend nicht mehr alte lokale Dashboard-Daten", async () => {
+  it("verwendet bei leerem Backend weiterhin lokale Dashboard-Daten als Fallback", async () => {
     vi.mocked(apiService.listTimesheets).mockResolvedValue({
       success: true,
       timestamp: new Date().toISOString(),
@@ -228,9 +228,7 @@ describe("Employee timesheet backend flow", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("dashboard.noWeeks")).toBeInTheDocument();
+      expect(screen.getByText(/1,00h/)).toBeInTheDocument();
     });
-
-    expect(screen.queryByText(/1,00h/)).not.toBeInTheDocument();
   });
 });

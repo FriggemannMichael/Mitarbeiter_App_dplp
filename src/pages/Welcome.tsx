@@ -22,6 +22,8 @@ type ConflictActionState = {
   canResetPin?: boolean;
 } | null;
 
+const SESSION_RETRY_DELAYS_MS = [0, 150, 400, 900];
+
 const languages = [
   { code: "de", name: "Deutsch", flag: "🇩🇪" },
   { code: "en", name: "English", flag: "🇬🇧" },
@@ -97,6 +99,34 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
     setConflictAction(null);
   };
 
+  const delay = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+
+  const resolveAuthenticatedSession = async (): Promise<EmployeeSessionDto> => {
+    for (const retryDelayMs of SESSION_RETRY_DELAYS_MS) {
+      if (retryDelayMs > 0) {
+        await delay(retryDelayMs);
+      }
+
+      try {
+        const sessionResponse = await apiService.getEmployeeSession();
+        const serverSession = sessionResponse.data?.employee;
+        if (sessionResponse.success && serverSession) {
+          return serverSession;
+        }
+      } catch {
+        // Some mobile browsers commit session cookies slightly after the login response.
+      }
+    }
+
+    throw new Error(
+      t("welcome.error.sessionPending") ||
+        "Anmeldung erfolgreich, aber Sitzungsdaten konnten noch nicht geladen werden. Bitte kurz erneut versuchen.",
+    );
+  };
+
   const completeAuthentication = (session: EmployeeSessionDto) => {
     storage.setEmployeeName(session.display_name);
     if (mode === "register") {
@@ -147,7 +177,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         if (!response.success || !employee) {
           throw new Error(response.error || t("welcome.error.register") || "Registrierung fehlgeschlagen");
         }
-        completeAuthentication(employee);
+        completeAuthentication(await resolveAuthenticatedSession());
       } else if (mode === "login") {
         const response = await apiService.loginEmployee({
           firstName: firstName.trim(),
@@ -160,7 +190,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
           throw new Error(response.error || t("welcome.error.login") || "Anmeldung fehlgeschlagen");
         }
         setLoginNeedsPhoneNumber(false);
-        completeAuthentication(employee);
+        completeAuthentication(await resolveAuthenticatedSession());
       } else {
         const response = await apiService.resetEmployeePin({
           firstName: firstName.trim(),
@@ -172,7 +202,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         if (!response.success || !employee) {
           throw new Error(response.error || t("welcome.error.resetPin") || "PIN konnte nicht zurückgesetzt werden");
         }
-        completeAuthentication(employee);
+        completeAuthentication(await resolveAuthenticatedSession());
       }
     } catch (submitErrorValue) {
       const errorCode =

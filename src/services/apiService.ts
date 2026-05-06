@@ -276,7 +276,7 @@ class ApiService {
       (defaultHeaders as Record<string, string>)["Authorization"] = `Bearer ${this.authToken}`;
     }
     const employeeCsrfToken =
-      this.employeeCsrfToken || this.getCookieValue("employee_csrf");
+      this.getCookieValue("employee_csrf") || this.employeeCsrfToken;
     if (employeeCsrfToken) {
       (defaultHeaders as Record<string, string>)["X-Employee-CSRF"] = employeeCsrfToken;
     }

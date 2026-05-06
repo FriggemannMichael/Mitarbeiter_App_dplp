@@ -215,15 +215,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
   }, [isConfigLoading]);
 
+  const localStoredWeeks = useMemo(
+    () =>
+      storage
+      .getAllStoredWeeks()
+      .filter((week) => week.employeeName === employeeName),
+    [employeeName],
+  );
+
   const sourceWeeks = useMemo(() => {
-    if (backendWeeks !== null) {
-      return backendWeeks;
+    if (backendWeeks === null) {
+      return localStoredWeeks;
     }
 
-    return storage
-      .getAllStoredWeeks()
-      .filter((week) => week.employeeName === employeeName);
-  }, [backendWeeks, employeeName]);
+    const mergedWeeks = new Map<string, WeekData>();
+
+    localStoredWeeks.forEach((week) => {
+      mergedWeeks.set(`${week.year}-${week.week}-${week.sheetId ?? 1}`, week);
+    });
+
+    backendWeeks.forEach((week) => {
+      mergedWeeks.set(`${week.year}-${week.week}-${week.sheetId ?? 1}`, week);
+    });
+
+    return Array.from(mergedWeeks.values());
+  }, [backendWeeks, localStoredWeeks]);
 
   // Wochendaten laden (mit allen Zetteln pro Woche)
   const weekData = useMemo(() => {
@@ -315,7 +331,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [sourceWeeks, t]);
 
   const effectiveWeekData =
-    backendWeeks !== null ? backendWeekData : weekData;
+    backendWeekData.length > 0 || backendWeeks !== null ? backendWeekData : weekData;
 
   // Statistiken berechnen
   const stats = useMemo(() => {
