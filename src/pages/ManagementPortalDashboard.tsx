@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   CalendarClock,
@@ -27,7 +27,7 @@ type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit"
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "GeprÃ¼ft",
+  reviewed: "Geprüft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -48,7 +48,7 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   if (status !== "submitted") {
     return "-";
   }
-  return portalQueue === "review" ? "Zu prÃ¼fen" : "Freizugeben";
+  return portalQueue === "review" ? "Zu prüfen" : "Freizugeben";
 }
 
 export const ManagementPortalDashboard: React.FC = () => {
@@ -90,7 +90,7 @@ export const ManagementPortalDashboard: React.FC = () => {
       ]);
 
       if (!summaryResponse.success) {
-        throw new Error(summaryResponse.error || "Portal-Ãœbersicht konnte nicht geladen werden");
+        throw new Error(summaryResponse.error || "Portal-Übersicht konnte nicht geladen werden");
       }
       if (!employeesResponse.success) {
         throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
@@ -233,7 +233,7 @@ export const ManagementPortalDashboard: React.FC = () => {
   ) => {
     const comment =
       status !== "approved"
-        ? window.prompt("Optionalen Kommentar fÃ¼r den Kundenverlauf eingeben:", "") || ""
+        ? window.prompt("Optionalen Kommentar für den Kundenverlauf eingeben:", "") || ""
         : "";
     const rejectionReason =
       status === "rejected"
@@ -475,7 +475,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -541,7 +541,7 @@ export const ManagementPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Zu prÃ¼fen
+                    Zu prüfen
                   </h2>
                   <div className="space-y-3">
                     {reviewTimesheets.map((timesheet) => (
@@ -554,7 +554,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -594,7 +594,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                PrÃ¼fen
+                                Prüfen
                               </button>
                               <button
                                 type="button"
@@ -611,7 +611,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     ))}
                     {reviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine zu prÃ¼fenden Stundenzettel.
+                        Aktuell keine zu prüfenden Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -752,7 +752,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                       <option value="">Alle Status</option>
                       <option value="open">Offen</option>
                       <option value="submitted">Eingereicht</option>
-                      <option value="reviewed">GeprÃ¼ft</option>
+                      <option value="reviewed">Geprüft</option>
                       <option value="approved">Freigegeben</option>
                       <option value="rejected">Abgelehnt</option>
                     </select>
@@ -788,7 +788,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                           {timesheet.employee_name}
                         </td>
                         <td className="py-3 pr-4">
-                          KW {timesheet.week_number}/{timesheet.week_year} Â· Zettel{" "}
+                          KW {timesheet.week_number}/{timesheet.week_year} · Zettel{" "}
                           {timesheet.sheet_id}
                         </td>
                         <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
@@ -827,7 +827,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                     className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"
                                   >
                                     <div className="font-medium text-slate-700">
-                                      {entry.actor || "Unbekannt"} Â·{" "}
+                                      {entry.actor || "Unbekannt"} ·{" "}
                                       {formatStatus(entry.status || entry.action)}
                                     </div>
                                     <div>{entry.timestamp}</div>
@@ -869,7 +869,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Pruefen
+                                Prüfen
                               </button>
                               <button
                                 type="button"
@@ -898,7 +898,7 @@ export const ManagementPortalDashboard: React.FC = () => {
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  AbwesenheitsÃ¼bersicht
+                  Abwesenheitsübersicht
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -969,7 +969,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     {auditEntries.length === 0 && (
                       <tr>
                         <td colSpan={6} className="py-6 text-center text-slate-500">
-                          Noch keine Audit-EintrÃ¤ge vorhanden.
+                          Noch keine Audit-Einträge vorhanden.
                         </td>
                       </tr>
                     )}
@@ -991,7 +991,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                 </div>
                 <div className="text-sm text-slate-600">
                   {selectedTimesheet
-                    ? `${selectedTimesheet.employee_name} Â· KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
+                    ? `${selectedTimesheet.employee_name} · KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
                     : "PDF wird vorbereitet..."}
                 </div>
               </div>
@@ -1010,7 +1010,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                       onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
                       className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                                PrÃ¼fen
+                                Prüfen
                     </button>
                     <button
                       type="button"
@@ -1057,4 +1057,3 @@ export const ManagementPortalDashboard: React.FC = () => {
     </div>
   );
 };
-
