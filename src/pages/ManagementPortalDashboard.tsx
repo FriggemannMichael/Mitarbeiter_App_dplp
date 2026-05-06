@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   CalendarClock,
@@ -14,7 +14,6 @@ import { useConfig } from "../contexts/ConfigContext";
 import {
   apiService,
   type PortalAbsenceDto,
-  type PortalAuditLogDto,
   type PortalEmployeeDto,
   type PortalSummaryDto,
   type PortalTimesheetDto,
@@ -22,12 +21,26 @@ import {
 import { managementPortalAuthService } from "../services/managementPortalAuthService";
 import { PdfExporter } from "../utils/pdfExporter";
 
-type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit";
+type PortalTab = "dashboard" | "employees" | "absences" | "history";
+
+type SendHistoryEntry = {
+  id: string;
+  employee_name: string;
+  sheet_id: string;
+  week_year: number;
+  week_number: number;
+  customer: string;
+  sent_at: string;
+  destination: string;
+  current_status: string;
+  last_actor: string;
+  last_comment: string;
+};
 
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "GeprÃ¼ft",
+  reviewed: "Geprueft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -48,7 +61,7 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   if (status !== "submitted") {
     return "-";
   }
-  return portalQueue === "review" ? "Zu prÃ¼fen" : "Freizugeben";
+  return portalQueue === "review" ? "Zu pruefen" : "Freizugeben";
 }
 
 export const ManagementPortalDashboard: React.FC = () => {
@@ -59,7 +72,6 @@ export const ManagementPortalDashboard: React.FC = () => {
   const [employees, setEmployees] = useState<PortalEmployeeDto[]>([]);
   const [timesheets, setTimesheets] = useState<PortalTimesheetDto[]>([]);
   const [absences, setAbsences] = useState<PortalAbsenceDto[]>([]);
-  const [auditEntries, setAuditEntries] = useState<PortalAuditLogDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [timesheetStatusFilter, setTimesheetStatusFilter] = useState("");
@@ -73,24 +85,18 @@ export const ManagementPortalDashboard: React.FC = () => {
     setIsLoading(true);
     setError("");
     try {
-      const [
-        summaryResponse,
-        employeesResponse,
-        timesheetsResponse,
-        absencesResponse,
-        auditResponse,
-      ] = await Promise.all([
+      const [summaryResponse, employeesResponse, timesheetsResponse, absencesResponse] =
+        await Promise.all([
         apiService.getPortalSummary(),
         apiService.getPortalEmployees(),
         apiService.getPortalTimesheets(
           timesheetStatusFilter ? { status: timesheetStatusFilter } : undefined,
         ),
         apiService.getPortalAbsences(),
-        apiService.getPortalAuditLog({ limit: 100 }),
       ]);
 
       if (!summaryResponse.success) {
-        throw new Error(summaryResponse.error || "Portal-Ãœbersicht konnte nicht geladen werden");
+        throw new Error(summaryResponse.error || "Portal-Uebersicht konnte nicht geladen werden");
       }
       if (!employeesResponse.success) {
         throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
@@ -101,15 +107,10 @@ export const ManagementPortalDashboard: React.FC = () => {
       if (!absencesResponse.success) {
         throw new Error(absencesResponse.error || "Abwesenheiten konnten nicht geladen werden");
       }
-      if (!auditResponse.success) {
-        throw new Error(auditResponse.error || "Audit-Log konnte nicht geladen werden");
-      }
-
       setSummary(summaryResponse.data || null);
       setEmployees(employeesResponse.data || []);
       setTimesheets(timesheetsResponse.data || []);
       setAbsences(absencesResponse.data || []);
-      setAuditEntries(auditResponse.data || []);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -194,14 +195,69 @@ export const ManagementPortalDashboard: React.FC = () => {
     return timesheets
       .filter(
         (timesheet) =>
-          timesheet.employee_name.trim() === selectedEmployeeName &&
-          timesheet.status === "submitted",
+          timesheet.employee_name.trim() === selectedEmployeeName,
       )
       .sort((a, b) => {
         const updatedAtA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
         const updatedAtB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
         if (updatedAtA !== updatedAtB) {
           return updatedAtB - updatedAtA;
+        }
+        if (a.week_year !== b.week_year) {
+          return b.week_year - a.week_year;
+        }
+        if (a.week_number !== b.week_number) {
+          return b.week_number - a.week_number;
+        }
+        return Number(b.sheet_id) - Number(a.sheet_id);
+      });
+  }, [selectedEmployeeName, timesheets]);
+
+  const displayedTimesheets = useMemo(() => {
+    if (!selectedEmployeeName) {
+      return timesheets;
+    }
+
+    return selectedEmployeeTimesheets;
+  }, [selectedEmployeeName, selectedEmployeeTimesheets, timesheets]);
+
+  const sendHistoryEntries = useMemo<SendHistoryEntry[]>(() => {
+    const entries = timesheets.map((timesheet) => {
+      const history = [...(timesheet.history || [])].sort((a, b) => {
+        const timestampA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timestampB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timestampB - timestampA;
+      });
+      const submittedEntry = history.find((entry) => {
+        const eventType = entry.status || entry.action;
+        return eventType === "submitted";
+      });
+      const latestEntry = history[0];
+
+      return {
+        id: `${timesheet.id}-${timesheet.sheet_id}`,
+        employee_name: timesheet.employee_name,
+        sheet_id: String(timesheet.sheet_id),
+        week_year: timesheet.week_year,
+        week_number: timesheet.week_number,
+        customer: timesheet.customer || "Kein Kunde",
+        sent_at: submittedEntry?.timestamp || timesheet.updated_at || "",
+        destination: formatPortalQueue(timesheet.portal_queue, "submitted"),
+        current_status: formatStatus(timesheet.status),
+        last_actor: latestEntry?.actor || "-",
+        last_comment: latestEntry?.comment || timesheet.customer_comment || "-",
+      };
+    });
+
+    return entries
+      .filter((entry) =>
+        selectedEmployeeName ? entry.employee_name.trim() === selectedEmployeeName : true,
+      )
+      .sort((a, b) => {
+        const sentAtA = a.sent_at ? new Date(a.sent_at).getTime() : 0;
+        const sentAtB = b.sent_at ? new Date(b.sent_at).getTime() : 0;
+        if (sentAtA !== sentAtB) {
+          return sentAtB - sentAtA;
         }
         if (a.week_year !== b.week_year) {
           return b.week_year - a.week_year;
@@ -233,7 +289,7 @@ export const ManagementPortalDashboard: React.FC = () => {
   ) => {
     const comment =
       status !== "approved"
-        ? window.prompt("Optionalen Kommentar fÃ¼r den Kundenverlauf eingeben:", "") || ""
+        ? window.prompt("Optionalen Kommentar fuer den Kundenverlauf eingeben:", "") || ""
         : "";
     const rejectionReason =
       status === "rejected"
@@ -320,7 +376,6 @@ export const ManagementPortalDashboard: React.FC = () => {
       "Status",
       "Stunden",
       "Abwesenheitstage",
-      "Klassifizierung",
       "Mitarbeiter-Signatur",
       "Vorgesetzten-Signatur",
       "Kommentar",
@@ -336,7 +391,6 @@ export const ManagementPortalDashboard: React.FC = () => {
       formatStatus(timesheet.status),
       timesheet.hours_total,
       timesheet.absence_days,
-      formatPortalQueue(timesheet.portal_queue, timesheet.status),
       timesheet.has_employee_signature ? "ja" : "nein",
       timesheet.has_supervisor_signature ? "ja" : "nein",
       timesheet.customer_comment || "",
@@ -427,9 +481,8 @@ export const ManagementPortalDashboard: React.FC = () => {
           {[
             { id: "dashboard", label: "Dashboard" },
             { id: "employees", label: "Mitarbeiter" },
-            { id: "timesheets", label: "Stundenzettel" },
             { id: "absences", label: "Abwesenheiten" },
-            { id: "audit", label: "Audit-Log" },
+            { id: "history", label: "Sendeverlauf" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -475,7 +528,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} -{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -541,7 +594,7 @@ export const ManagementPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Zu prÃ¼fen
+                    Zu pruefen
                   </h2>
                   <div className="space-y-3">
                     {reviewTimesheets.map((timesheet) => (
@@ -554,7 +607,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} -{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -594,7 +647,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                PrÃ¼fen
+                                Pruefen
                               </button>
                               <button
                                 type="button"
@@ -611,7 +664,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     ))}
                     {reviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine zu prÃ¼fenden Stundenzettel.
+                        Aktuell keine zu pruefenden Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -657,248 +710,156 @@ export const ManagementPortalDashboard: React.FC = () => {
                   </tbody>
                 </table>
 
-                {selectedEmployeeName && (
-                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between gap-3 mb-4">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900">
-                          Verlauf eingereichter Stundenzettel
-                        </h3>
-                        <p className="text-sm text-slate-600 mt-1">{selectedEmployeeName}</p>
-                      </div>
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">
+                        {selectedEmployeeName
+                          ? `Stundenzettel von ${selectedEmployeeName}`
+                          : "Stundenzettel"}
+                      </h3>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {selectedEmployeeName
+                          ? "Verlauf fuer den ausgewaehlten Mitarbeiter"
+                          : "Mitarbeiter aus der Liste auswaehlen, um den Verlauf zu sehen"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <select
+                        value={timesheetStatusFilter}
+                        onChange={(event) => setTimesheetStatusFilter(event.target.value)}
+                        className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">Alle Status</option>
+                        <option value="open">Offen</option>
+                        <option value="submitted">Eingereicht</option>
+                        <option value="reviewed">Geprueft</option>
+                        <option value="approved">Freigegeben</option>
+                        <option value="rejected">Abgelehnt</option>
+                      </select>
+                      {selectedEmployeeName && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEmployeeName("")}
+                          className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Filter aufheben
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setSelectedEmployeeName("")}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        onClick={handleCsvExport}
+                        className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
                       >
-                        Schließen
+                        <Download className="w-4 h-4" />
+                        CSV exportieren
                       </button>
                     </div>
-
-                    {selectedEmployeeTimesheets.length === 0 ? (
-                      <p className="text-sm text-slate-600">
-                        Für diesen Mitarbeiter gibt es aktuell keine eingereichten
-                        Stundenzettel.
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                          <thead>
-                            <tr className="text-left text-slate-500 border-b border-slate-200">
-                              <th className="py-2 pr-4">Woche</th>
-                              <th className="py-2 pr-4">Kunde</th>
-                              <th className="py-2 pr-4">Stunden</th>
-                              <th className="py-2 pr-4">Status</th>
-                              <th className="py-2 pr-4">Aktualisiert</th>
-                              <th className="py-2 pr-4">PDF</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedEmployeeTimesheets.map((timesheet) => (
-                              <tr key={timesheet.id} className="border-b border-slate-200/70">
-                                <td className="py-3 pr-4">
-                                  KW {timesheet.week_number}/{timesheet.week_year} · Zettel{" "}
-                                  {timesheet.sheet_id}
-                                </td>
-                                <td className="py-3 pr-4">
-                                  {timesheet.customer || "Kein Kunde"}
-                                </td>
-                                <td className="py-3 pr-4">{timesheet.hours_total}h</td>
-                                <td className="py-3 pr-4">
-                                  <span
-                                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                      statusClasses[timesheet.status] || statusClasses.open
-                                    }`}
-                                  >
-                                    {formatStatus(timesheet.status)}
-                                  </span>
-                                </td>
-                                <td className="py-3 pr-4">
-                                  {timesheet.updated_at
-                                    ? new Date(timesheet.updated_at).toLocaleString("de-DE")
-                                    : "-"}
-                                </td>
-                                <td className="py-3 pr-4">
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleOpenPdfPreview(timesheet)}
-                                    className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    PDF ansehen
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
                   </div>
-                )}
-              </section>
-            )}
 
-            {activeTab === "timesheets" && (
-              <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
-                  <h2 className="text-lg font-bold text-slate-900">Stundenzettel</h2>
-                  <div className="flex flex-wrap gap-3">
-                    <select
-                      value={timesheetStatusFilter}
-                      onChange={(event) => setTimesheetStatusFilter(event.target.value)}
-                      className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                    >
-                      <option value="">Alle Status</option>
-                      <option value="open">Offen</option>
-                      <option value="submitted">Eingereicht</option>
-                      <option value="reviewed">GeprÃ¼ft</option>
-                      <option value="approved">Freigegeben</option>
-                      <option value="rejected">Abgelehnt</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleCsvExport}
-                      className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      CSV exportieren
-                    </button>
-                  </div>
-                </div>
-
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-200">
-                      <th className="py-2 pr-4">Mitarbeiter</th>
-                      <th className="py-2 pr-4">Woche</th>
-                      <th className="py-2 pr-4">Kunde</th>
-                      <th className="py-2 pr-4">Stunden</th>
-                      <th className="py-2 pr-4">Klassifizierung</th>
-                      <th className="py-2 pr-4">Status und Verlauf</th>
-                      <th className="py-2 pr-4">Unterschriften</th>
-                      <th className="py-2 pr-4">PDF</th>
-                      {canApprove && <th className="py-2 pr-4">Aktion</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {timesheets.map((timesheet) => (
-                      <tr key={timesheet.id} className="border-b border-slate-100 align-top">
-                        <td className="py-3 pr-4 font-medium text-slate-900">
-                          {timesheet.employee_name}
-                        </td>
-                        <td className="py-3 pr-4">
-                          KW {timesheet.week_number}/{timesheet.week_year} Â· Zettel{" "}
-                          {timesheet.sheet_id}
-                        </td>
-                        <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
-                        <td className="py-3 pr-4">{timesheet.hours_total}h</td>
-                        <td className="py-3 pr-4">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {formatPortalQueue(timesheet.portal_queue, timesheet.status)}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              statusClasses[timesheet.status] || statusClasses.open
-                            }`}
-                          >
-                            {formatStatus(timesheet.status)}
-                          </span>
-                          {timesheet.rejection_reason && (
-                            <div className="text-xs text-rose-700 mt-2">
-                              Ablehnungsgrund: {timesheet.rejection_reason}
-                            </div>
-                          )}
-                          {timesheet.customer_comment && (
-                            <div className="text-xs text-slate-600 mt-2">
-                              Kommentar: {timesheet.customer_comment}
-                            </div>
-                          )}
-                          {(timesheet.history || []).length > 0 && (
-                            <div className="mt-3 space-y-2">
-                              {(timesheet.history || [])
-                                .slice(-3)
-                                .reverse()
-                                .map((entry, index) => (
-                                  <div
-                                    key={`${timesheet.id}-${entry.timestamp}-${index}`}
-                                    className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"
-                                  >
-                                    <div className="font-medium text-slate-700">
-                                      {entry.actor || "Unbekannt"} Â·{" "}
-                                      {formatStatus(entry.status || entry.action)}
-                                    </div>
-                                    <div>{entry.timestamp}</div>
-                                    {entry.comment && (
-                                      <div className="mt-1">{entry.comment}</div>
-                                    )}
+                  {selectedEmployeeName ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-slate-500 border-b border-slate-200">
+                            <th className="py-2 pr-4">Mitarbeiter</th>
+                            <th className="py-2 pr-4">Woche</th>
+                            <th className="py-2 pr-4">Kunde</th>
+                            <th className="py-2 pr-4">Stunden</th>
+                            <th className="py-2 pr-4">Unterschriften</th>
+                            <th className="py-2 pr-4">PDF</th>
+                            {canApprove && <th className="py-2 pr-4">Aktion</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayedTimesheets.map((timesheet) => (
+                            <tr key={timesheet.id} className="border-b border-slate-100 align-top">
+                              <td className="py-3 pr-4 font-medium text-slate-900">
+                                {timesheet.employee_name}
+                              </td>
+                              <td className="py-3 pr-4">
+                                KW {timesheet.week_number}/{timesheet.week_year} - Zettel{" "}
+                                {timesheet.sheet_id}
+                              </td>
+                              <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
+                              <td className="py-3 pr-4">{timesheet.hours_total}h</td>
+                              <td className="py-3 pr-4 text-xs text-slate-700">
+                                <div>MA: {timesheet.has_employee_signature ? "Ja" : "Nein"}</div>
+                                <div>VL: {timesheet.has_supervisor_signature ? "Ja" : "Nein"}</div>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenPdfPreview(timesheet)}
+                                  className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  PDF ansehen
+                                </button>
+                              </td>
+                              {canApprove && (
+                                <td className="py-3 pr-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleAddComment(timesheet.id)}
+                                      className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" />
+                                      Kommentar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
+                                      className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                                    >
+                                      Pruefen
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleReviewAction(timesheet.id, "approved")}
+                                      className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                                    >
+                                      Freigeben
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleReviewAction(timesheet.id, "rejected")}
+                                      className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                                    >
+                                      Ablehnen
+                                    </button>
                                   </div>
-                                ))}
-                            </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                          {displayedTimesheets.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={canApprove ? 7 : 6}
+                                className="py-6 text-center text-slate-500"
+                              >
+                                Fuer diesen Mitarbeiter wurden keine Stundenzettel gefunden.
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="py-3 pr-4 text-xs text-slate-700">
-                          <div>MA: {timesheet.has_employee_signature ? "Ja" : "Nein"}</div>
-                          <div>VL: {timesheet.has_supervisor_signature ? "Ja" : "Nein"}</div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <button
-                            type="button"
-                            onClick={() => void handleOpenPdfPreview(timesheet)}
-                            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            PDF ansehen
-                          </button>
-                        </td>
-                        {canApprove && (
-                          <td className="py-3 pr-4">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleAddComment(timesheet.id)}
-                                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                Kommentar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
-                                className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
-                              >
-                                Pruefen
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleReviewAction(timesheet.id, "approved")}
-                                className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                              >
-                                Freigeben
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleReviewAction(timesheet.id, "rejected")}
-                                className="rounded-xl border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
-                              >
-                                Ablehnen
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                      Bitte einen Mitarbeiter aus der Liste auswaehlen.
+                    </div>
+                  )}
+                </div>
               </section>
             )}
 
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  AbwesenheitsÃ¼bersicht
+                  Abwesenheitsuebersicht
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -934,42 +895,84 @@ export const ManagementPortalDashboard: React.FC = () => {
               </section>
             )}
 
-            {activeTab === "audit" && (
+            {activeTab === "history" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
-                <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  Audit-Log Verwaltungsportal
-                </h2>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Sendeverlauf</h2>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Wann welcher Stundenzettel eingereicht wurde und wohin er gelaufen ist
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <select
+                      value={selectedEmployeeName}
+                      onChange={(event) => setSelectedEmployeeName(event.target.value)}
+                      className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">Alle Mitarbeiter</option>
+                      {employeeOverview.map((employee) => (
+                        <option key={employee.employee_name} value={employee.employee_name.trim()}>
+                          {employee.employee_name}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedEmployeeName && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEmployeeName("")}
+                        className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Filter aufheben
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-200">
                       <th className="py-2 pr-4">Zeitpunkt</th>
                       <th className="py-2 pr-4">Mitarbeiter</th>
                       <th className="py-2 pr-4">Zettel</th>
-                      <th className="py-2 pr-4">Aktion</th>
-                      <th className="py-2 pr-4">Benutzer</th>
-                      <th className="py-2 pr-4">Kommentar</th>
+                      <th className="py-2 pr-4">Kunde</th>
+                      <th className="py-2 pr-4">Gesendet an</th>
+                      <th className="py-2 pr-4">Aktueller Status</th>
+                      <th className="py-2 pr-4">Letzte Aktivitaet</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {auditEntries.map((entry) => (
+                    {sendHistoryEntries.map((entry) => (
                       <tr key={entry.id} className="border-b border-slate-100 align-top">
-                        <td className="py-3 pr-4">{entry.created_at || "-"}</td>
-                        <td className="py-3 pr-4 font-medium text-slate-900">
-                          {entry.employee_name || "-"}
-                        </td>
-                        <td className="py-3 pr-4">{entry.sheet_id || "-"}</td>
-                        <td className="py-3 pr-4">{formatStatus(entry.status || entry.action)}</td>
                         <td className="py-3 pr-4">
-                          {entry.actor || "-"}
-                          {entry.actor_role ? ` (${entry.actor_role})` : ""}
+                          {entry.sent_at ? new Date(entry.sent_at).toLocaleString("de-DE") : "-"}
                         </td>
-                        <td className="py-3 pr-4">{entry.comment || "-"}</td>
+                        <td className="py-3 pr-4 font-medium text-slate-900">
+                          {entry.employee_name}
+                        </td>
+                        <td className="py-3 pr-4">
+                          KW {entry.week_number}/{entry.week_year} - Zettel {entry.sheet_id}
+                        </td>
+                        <td className="py-3 pr-4">{entry.customer}</td>
+                        <td className="py-3 pr-4">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {entry.destination}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800">
+                            {entry.current_status}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div>{entry.last_actor}</div>
+                          <div className="text-xs text-slate-500 mt-1">{entry.last_comment}</div>
+                        </td>
                       </tr>
                     ))}
-                    {auditEntries.length === 0 && (
+                    {sendHistoryEntries.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-6 text-center text-slate-500">
-                          Noch keine Audit-EintrÃ¤ge vorhanden.
+                        <td colSpan={7} className="py-6 text-center text-slate-500">
+                          Keine Eintraege im Sendeverlauf vorhanden.
                         </td>
                       </tr>
                     )}
@@ -991,7 +994,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                 </div>
                 <div className="text-sm text-slate-600">
                   {selectedTimesheet
-                    ? `${selectedTimesheet.employee_name} Â· KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
+                    ? `${selectedTimesheet.employee_name} - KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
                     : "PDF wird vorbereitet..."}
                 </div>
               </div>
@@ -1010,7 +1013,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                       onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
                       className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                                PrÃ¼fen
+                                Pruefen
                     </button>
                     <button
                       type="button"

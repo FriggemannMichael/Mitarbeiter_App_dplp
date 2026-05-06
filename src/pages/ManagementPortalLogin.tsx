@@ -109,7 +109,7 @@ export const ManagementPortalLogin: React.FC<ManagementPortalLoginProps> = ({
             disabled={isLoading || !username || !password}
             className="w-full rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3"
           >
-            {isLoading ? "Anmeldung laeuft..." : "Anmelden"}
+            {isLoading ? "Anmeldung läuft..." : "Anmelden"}
           </button>
         </form>
       </div>
