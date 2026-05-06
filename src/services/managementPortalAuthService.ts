@@ -43,7 +43,7 @@ class PortalAuthService {
           await this.logout();
           return {
             success: false,
-            error: "Dieses Konto hat keinen Zugriff auf das Kundenportal.",
+            error: "Dieses Konto hat keinen Zugriff auf das Verwaltungsportal.",
           };
         }
         return { success: true };
@@ -117,4 +117,4 @@ class PortalAuthService {
   }
 }
 
-export const portalAuthService = new PortalAuthService();
+export const managementPortalAuthService = new PortalAuthService();

@@ -4,7 +4,7 @@ import { storage } from "./utils/storage";
 import { Welcome } from "./pages/Welcome";
 import { MainApp } from "./pages/MainApp";
 import { AdminRoute } from "./pages/AdminRoute";
-import { CustomerPortalRoute } from "./pages/CustomerPortalRoute";
+import { ManagementPortalRoute } from "./pages/ManagementPortalRoute";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -36,7 +36,7 @@ function AppContent() {
     currentPath === "/admin" ||
     currentPath === "/pro/admin" ||
     currentPath.endsWith("/admin");
-  const isCustomerPortalRoute =
+  const isManagementPortalRoute =
     currentPath === "/verwaltung" ||
     currentPath === "/pro/verwaltung" ||
     currentPath.endsWith("/verwaltung");
@@ -62,7 +62,7 @@ function AppContent() {
   }, [error]);
 
   useEffect(() => {
-    if (isConfigLoading || isAdminRoute || isCustomerPortalRoute) {
+    if (isConfigLoading || isAdminRoute || isManagementPortalRoute) {
       if (!isConfigLoading) {
         setLoading(false);
       }
@@ -101,14 +101,14 @@ function AppContent() {
     return () => {
       isCancelled = true;
     };
-  }, [isAdminRoute, isCustomerPortalRoute, isConfigLoading]);
+  }, [isAdminRoute, isManagementPortalRoute, isConfigLoading]);
 
   useEffect(() => {
     if (
       loading ||
       isConfigLoading ||
       isAdminRoute ||
-      isCustomerPortalRoute ||
+      isManagementPortalRoute ||
       !employeeSession?.display_name
     ) {
       return;
@@ -274,16 +274,16 @@ function AppContent() {
     return () => {
       isCancelled = true;
     };
-  }, [employeeSession, isAdminRoute, isCustomerPortalRoute, isConfigLoading, loading]);
+  }, [employeeSession, isAdminRoute, isManagementPortalRoute, isConfigLoading, loading]);
 
   useEffect(() => {
-    const enableTheme = Boolean(employeeSession) || isAdminRoute || isCustomerPortalRoute;
+    const enableTheme = Boolean(employeeSession) || isAdminRoute || isManagementPortalRoute;
     window.dispatchEvent(
       new CustomEvent("app:set-theme-enabled", {
         detail: { enabled: enableTheme },
       }),
     );
-  }, [employeeSession, isAdminRoute, isCustomerPortalRoute]);
+  }, [employeeSession, isAdminRoute, isManagementPortalRoute]);
 
   const handleEmployeeAuthenticated = (session: EmployeeSessionDto) => {
     storage.setEmployeeName(session.display_name);
@@ -331,10 +331,10 @@ function AppContent() {
     );
   }
 
-  if (isCustomerPortalRoute) {
+  if (isManagementPortalRoute) {
     return (
       <ErrorBoundary>
-        <CustomerPortalRoute />
+        <ManagementPortalRoute />
       </ErrorBoundary>
     );
   }
