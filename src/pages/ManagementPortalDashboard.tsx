@@ -6,6 +6,7 @@ import {
   Download,
   Eye,
   LogOut,
+  MessageCircle,
   MessageSquare,
   XCircle,
 } from "lucide-react";
@@ -15,7 +16,6 @@ import {
   apiService,
   type PortalAbsenceDto,
   type PortalEmployeeDto,
-  type PortalSummaryDto,
   type PortalTimesheetDto,
 } from "../services/apiService";
 import { managementPortalAuthService } from "../services/managementPortalAuthService";
@@ -64,11 +64,20 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   return portalQueue === "review" ? "Zu pruefen" : "Freizugeben";
 }
 
+function getCurrentIsoWeek(): { week: number; year: number } {
+  const date = new Date();
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return { week, year: utcDate.getUTCFullYear() };
+}
+
 export const ManagementPortalDashboard: React.FC = () => {
   const { config } = useConfig();
   const currentUser = managementPortalAuthService.getCurrentUser();
   const [activeTab, setActiveTab] = useState<PortalTab>("dashboard");
-  const [summary, setSummary] = useState<PortalSummaryDto | null>(null);
   const [employees, setEmployees] = useState<PortalEmployeeDto[]>([]);
   const [timesheets, setTimesheets] = useState<PortalTimesheetDto[]>([]);
   const [absences, setAbsences] = useState<PortalAbsenceDto[]>([]);
@@ -79,6 +88,7 @@ export const ManagementPortalDashboard: React.FC = () => {
   const [selectedTimesheet, setSelectedTimesheet] = useState<PortalTimesheetDto | null>(null);
   const [selectedEmployeeName, setSelectedEmployeeName] = useState("");
   const [isPreparingPdf, setIsPreparingPdf] = useState(false);
+  const [showChatPrototype, setShowChatPrototype] = useState(false);
   const canApprove = managementPortalAuthService.canApproveTimesheets();
 
   const loadPortalData = async () => {
@@ -107,7 +117,6 @@ export const ManagementPortalDashboard: React.FC = () => {
       if (!absencesResponse.success) {
         throw new Error(absencesResponse.error || "Abwesenheiten konnten nicht geladen werden");
       }
-      setSummary(summaryResponse.data || null);
       setEmployees(employeesResponse.data || []);
       setTimesheets(timesheetsResponse.data || []);
       setAbsences(absencesResponse.data || []);
@@ -134,20 +143,42 @@ export const ManagementPortalDashboard: React.FC = () => {
     };
   }, [pdfPreviewUrl]);
 
-  const approvalTimesheets = useMemo(
+  const currentIsoWeek = useMemo(() => getCurrentIsoWeek(), []);
+
+  const releasedTimesheets = useMemo(
     () =>
       timesheets
-        .filter((item) => item.status === "submitted" && item.portal_queue === "approval")
+        .filter(
+          (item) =>
+            item.status === "submitted" &&
+            item.has_employee_signature &&
+            item.has_supervisor_signature,
+        )
         .slice(0, 8),
     [timesheets],
   );
 
-  const reviewTimesheets = useMemo(
+  const inReviewTimesheets = useMemo(
     () =>
       timesheets
-        .filter((item) => item.status === "submitted" && item.portal_queue === "review")
+        .filter(
+          (item) =>
+            item.status === "submitted" &&
+            (!item.has_employee_signature || !item.has_supervisor_signature),
+        )
         .slice(0, 8),
     [timesheets],
+  );
+
+  const submittedTimesheetsThisWeek = useMemo(
+    () =>
+      timesheets.filter(
+        (item) =>
+          item.status === "submitted" &&
+          item.week_number === currentIsoWeek.week &&
+          item.week_year === currentIsoWeek.year,
+      ).length,
+    [currentIsoWeek.week, currentIsoWeek.year, timesheets],
   );
 
   const employeeOverview = useMemo(() => {
@@ -451,20 +482,35 @@ export const ManagementPortalDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 mt-6">
+          <div className="grid grid-cols-1 gap-4 mt-6 lg:grid-cols-2">
             {[
               {
-                label: "Eingereichte Zettel",
-                value: summary?.metrics.submitted_timesheets ?? 0,
+                label: "Eingereichte Stundenbelege",
+                value: submittedTimesheetsThisWeek,
                 suffix: "",
                 icon: <CalendarClock className="w-5 h-5" />,
+                onClick: undefined,
+              },
+              {
+                label: "Mitarbeiter-Chat",
+                value: "Prototyp",
+                suffix: "",
+                icon: <MessageCircle className="w-5 h-5" />,
+                onClick: () => setShowChatPrototype(true),
               },
             ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.onClick}
+                className={`rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left ${
+                  item.onClick ? "transition-colors hover:bg-sky-50 hover:border-sky-300" : ""
+                }`}
+              >
                 <div className="flex items-center justify-between text-slate-500 mb-3">
                   {item.icon}
                   <span className="text-[11px] uppercase tracking-wide font-semibold">
-                    Live
+                    {item.onClick ? "Zukunft" : "Live"}
                   </span>
                 </div>
                 <div className="text-2xl font-bold text-slate-900">
@@ -472,7 +518,17 @@ export const ManagementPortalDashboard: React.FC = () => {
                   {item.suffix}
                 </div>
                 <div className="text-sm text-slate-600 mt-1">{item.label}</div>
-              </div>
+                {!item.onClick && (
+                  <div className="text-xs text-slate-500 mt-3">
+                    Anzahl der eingereichten Belege in der aktuellen Kalenderwoche
+                  </div>
+                )}
+                {item.onClick && (
+                  <div className="text-xs text-slate-500 mt-3">
+                    Konzept ansehen und geplante Kommunikation erklaeren
+                  </div>
+                )}
+              </button>
             ))}
           </div>
         </div>
@@ -515,10 +571,10 @@ export const ManagementPortalDashboard: React.FC = () => {
               <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6">
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Freizugeben
+                    Freigegeben
                   </h2>
                   <div className="space-y-3">
-                    {approvalTimesheets.map((timesheet) => (
+                    {releasedTimesheets.map((timesheet) => (
                       <div
                         key={timesheet.id}
                         className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
@@ -584,9 +640,9 @@ export const ManagementPortalDashboard: React.FC = () => {
                         </div>
                       </div>
                     ))}
-                    {approvalTimesheets.length === 0 && (
+                    {releasedTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine freizugebenden Stundenzettel.
+                        Aktuell keine vollstaendig unterschriebenen eingereichten Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -594,10 +650,10 @@ export const ManagementPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Zu pruefen
+                    In Pruefung
                   </h2>
                   <div className="space-y-3">
-                    {reviewTimesheets.map((timesheet) => (
+                    {inReviewTimesheets.map((timesheet) => (
                       <div
                         key={timesheet.id}
                         className="rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
@@ -662,9 +718,9 @@ export const ManagementPortalDashboard: React.FC = () => {
                         </div>
                       </div>
                     ))}
-                    {reviewTimesheets.length === 0 && (
+                    {inReviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine zu pruefenden Stundenzettel.
+                        Aktuell keine eingereichten Stundenzettel mit fehlenden Unterschriften.
                       </div>
                     )}
                   </div>
@@ -1057,7 +1113,78 @@ export const ManagementPortalDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {showChatPrototype && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-lg font-bold text-slate-900">Prototyp Mitarbeiter-Chat</div>
+                <div className="text-sm text-slate-600 mt-1">
+                  Zukuenftige Direktkommunikation zwischen Verwaltung und Mitarbeiter-App
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChatPrototype(false)}
+                className="rounded-2xl bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-black"
+              >
+                Schliessen
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-6">
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold uppercase tracking-wide text-sky-700 mb-2">
+                  Geplante Funktion
+                </div>
+                <p className="text-sm text-slate-700 leading-6">
+                  Der Mitarbeiter-Chat soll Rueckfragen zu Stundenzetteln, Hinweisen zu Einsaetzen,
+                  Freigaben, Unterlagen und kurzfristige Verwaltungsnachrichten direkt zwischen
+                  Portal und Mitarbeiter-App austauschen. Nachrichten aus dem Verwaltungsportal
+                  koennen dabei automatisch per Webhook angestossen und in die App des
+                  Mitarbeiters zugestellt werden.
+                </p>
+              </section>
+
+              <section className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-base font-bold text-slate-900 mb-2">
+                    Was der Chat spaeter koennen soll
+                  </div>
+                  <ul className="space-y-2 text-sm text-slate-700">
+                    <li>Direkte Rueckfragen zu einem konkreten Stundenzettel</li>
+                    <li>Benachrichtigungen bei Freigabe, Ablehnung oder Pruefung</li>
+                    <li>Versand von Einsatzinfos, Dokumenten und organisatorischen Hinweisen</li>
+                    <li>Saubere Zuordnung der Kommunikation zu Mitarbeiter und Vorgang</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-base font-bold text-slate-900 mb-2">
+                    Warum Matrix als Grundlage
+                  </div>
+                  <ul className="space-y-2 text-sm text-slate-700">
+                    <li>Offener Standard statt proprietaerer Messenger-Abhaengigkeit</li>
+                    <li>Eigener Serverbetrieb fuer DSGVO-konforme Datenhaltung</li>
+                    <li>Gute Eignung fuer sichere App-zu-Portal-Kommunikation</li>
+                    <li>Webhook- und Bot-Anbindung fuer automatisierte Prozesse</li>
+                  </ul>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                <div className="text-base font-bold text-slate-900 mb-2">Marketing-Satz</div>
+                <p className="text-sm text-slate-700 leading-6">
+                  Der geplante Matrix-basierte Mitarbeiter-Chat verbindet Verwaltung und App in
+                  einem sicheren, DSGVO-konformen Kommunikationskanal, der schnell, direkt und
+                  voll unter eigener Kontrolle bleibt.
+                </p>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
