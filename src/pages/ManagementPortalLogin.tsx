@@ -2,14 +2,14 @@ import React, { useEffect, useState } from "react";
 import { AlertCircle, Building2, Lock, User } from "lucide-react";
 
 import { useCompanyConfig } from "../contexts/ConfigContext";
-import { portalAuthService } from "../services/portalAuthService";
+import { managementPortalAuthService } from "../services/managementPortalAuthService";
 
-interface CustomerPortalLoginProps {
+interface ManagementPortalLoginProps {
   onLoginSuccess: () => void;
   initialError?: string;
 }
 
-export const CustomerPortalLogin: React.FC<CustomerPortalLoginProps> = ({
+export const ManagementPortalLogin: React.FC<ManagementPortalLoginProps> = ({
   onLoginSuccess,
   initialError = "",
 }) => {
@@ -22,7 +22,7 @@ export const CustomerPortalLogin: React.FC<CustomerPortalLoginProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (portalAuthService.isAuthenticated()) {
+    if (managementPortalAuthService.isAuthenticated()) {
       onLoginSuccess();
     }
   }, [onLoginSuccess]);
@@ -36,7 +36,7 @@ export const CustomerPortalLogin: React.FC<CustomerPortalLoginProps> = ({
     setError("");
     setIsLoading(true);
     try {
-      const result = await portalAuthService.login(username, password);
+      const result = await managementPortalAuthService.login(username, password);
       if (result.success) {
         onLoginSuccess();
       } else {
@@ -55,9 +55,9 @@ export const CustomerPortalLogin: React.FC<CustomerPortalLoginProps> = ({
           <div className="w-16 h-16 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center mx-auto mb-4">
             <Building2 className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Kundenportal</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Verwaltungsportal</h1>
           <p className="text-sm text-slate-600 mt-2">
-            Zugriff auf Mitarbeiterdaten, Zeiten und Abwesenheiten
+            Zugriff auf Mitarbeiterdaten, Stundenzettel und Abwesenheiten
           </p>
         </div>
 

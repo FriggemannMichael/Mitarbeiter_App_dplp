@@ -1,15 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   CalendarClock,
   CheckCircle2,
-  Clock3,
   Download,
   Eye,
   LogOut,
   MessageSquare,
-  ShieldCheck,
-  Users,
   XCircle,
 } from "lucide-react";
 
@@ -22,7 +19,7 @@ import {
   type PortalSummaryDto,
   type PortalTimesheetDto,
 } from "../services/apiService";
-import { portalAuthService } from "../services/portalAuthService";
+import { managementPortalAuthService } from "../services/managementPortalAuthService";
 import { PdfExporter } from "../utils/pdfExporter";
 
 type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit";
@@ -30,7 +27,7 @@ type PortalTab = "dashboard" | "employees" | "timesheets" | "absences" | "audit"
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "Geprüft",
+  reviewed: "GeprÃ¼ft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -51,12 +48,12 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   if (status !== "submitted") {
     return "-";
   }
-  return portalQueue === "review" ? "Zu prüfen" : "Freizugeben";
+  return portalQueue === "review" ? "Zu prÃ¼fen" : "Freizugeben";
 }
 
-export const CustomerPortalDashboard: React.FC = () => {
+export const ManagementPortalDashboard: React.FC = () => {
   const { config } = useConfig();
-  const currentUser = portalAuthService.getCurrentUser();
+  const currentUser = managementPortalAuthService.getCurrentUser();
   const [activeTab, setActiveTab] = useState<PortalTab>("dashboard");
   const [summary, setSummary] = useState<PortalSummaryDto | null>(null);
   const [employees, setEmployees] = useState<PortalEmployeeDto[]>([]);
@@ -68,8 +65,9 @@ export const CustomerPortalDashboard: React.FC = () => {
   const [timesheetStatusFilter, setTimesheetStatusFilter] = useState("");
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [selectedTimesheet, setSelectedTimesheet] = useState<PortalTimesheetDto | null>(null);
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState("");
   const [isPreparingPdf, setIsPreparingPdf] = useState(false);
-  const canApprove = portalAuthService.canApproveTimesheets();
+  const canApprove = managementPortalAuthService.canApproveTimesheets();
 
   const loadPortalData = async () => {
     setIsLoading(true);
@@ -92,7 +90,7 @@ export const CustomerPortalDashboard: React.FC = () => {
       ]);
 
       if (!summaryResponse.success) {
-        throw new Error(summaryResponse.error || "Portal-Übersicht konnte nicht geladen werden");
+        throw new Error(summaryResponse.error || "Portal-Ãœbersicht konnte nicht geladen werden");
       }
       if (!employeesResponse.success) {
         throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
@@ -151,8 +149,72 @@ export const CustomerPortalDashboard: React.FC = () => {
     [timesheets],
   );
 
+  const employeeOverview = useMemo(() => {
+    const groupedEmployees = new Map<
+      string,
+      {
+        employee_name: string;
+        has_current_week_timesheet: boolean;
+        last_updated_at?: string | null;
+      }
+    >();
+
+    employees.forEach((employee) => {
+      const key = employee.employee_name.trim();
+      const current = groupedEmployees.get(key);
+      const currentUpdatedAt = current?.last_updated_at
+        ? new Date(current.last_updated_at).getTime()
+        : 0;
+      const nextUpdatedAt = employee.last_updated_at
+        ? new Date(employee.last_updated_at).getTime()
+        : 0;
+
+      groupedEmployees.set(key, {
+        employee_name: employee.employee_name,
+        has_current_week_timesheet:
+          Boolean(current?.has_current_week_timesheet) ||
+          employee.has_current_week_timesheet,
+        last_updated_at:
+          nextUpdatedAt >= currentUpdatedAt
+            ? employee.last_updated_at
+            : current?.last_updated_at,
+      });
+    });
+
+    return Array.from(groupedEmployees.values()).sort((a, b) =>
+      a.employee_name.localeCompare(b.employee_name, "de"),
+    );
+  }, [employees]);
+
+  const selectedEmployeeTimesheets = useMemo(() => {
+    if (!selectedEmployeeName) {
+      return [];
+    }
+
+    return timesheets
+      .filter(
+        (timesheet) =>
+          timesheet.employee_name.trim() === selectedEmployeeName &&
+          timesheet.status === "submitted",
+      )
+      .sort((a, b) => {
+        const updatedAtA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const updatedAtB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        if (updatedAtA !== updatedAtB) {
+          return updatedAtB - updatedAtA;
+        }
+        if (a.week_year !== b.week_year) {
+          return b.week_year - a.week_year;
+        }
+        if (a.week_number !== b.week_number) {
+          return b.week_number - a.week_number;
+        }
+        return Number(b.sheet_id) - Number(a.sheet_id);
+      });
+  }, [selectedEmployeeName, timesheets]);
+
   const handleLogout = async () => {
-    await portalAuthService.logout();
+    await managementPortalAuthService.logout();
     window.location.reload();
   };
 
@@ -171,7 +233,7 @@ export const CustomerPortalDashboard: React.FC = () => {
   ) => {
     const comment =
       status !== "approved"
-        ? window.prompt("Optionalen Kommentar für den Kundenverlauf eingeben:", "") || ""
+        ? window.prompt("Optionalen Kommentar fÃ¼r den Kundenverlauf eingeben:", "") || ""
         : "";
     const rejectionReason =
       status === "rejected"
@@ -293,7 +355,7 @@ export const CustomerPortalDashboard: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "kundenportal-stundenzettel.csv";
+    link.download = "verwaltungsportal-stundenzettel.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -306,10 +368,10 @@ export const CustomerPortalDashboard: React.FC = () => {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 text-sky-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide mb-3">
                 <Building2 className="w-4 h-4" />
-                Kundenportal
+                Verwaltungsportal
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Freigaben und Kundenprüfung
+                Verwaltung und Freigaben
               </h1>
               <p className="text-sm text-slate-600 mt-2">
                 Angemeldet als {currentUser?.username} ({currentUser?.role || "user"})
@@ -335,31 +397,13 @@ export const CustomerPortalDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-1 mt-6">
             {[
-              {
-                label: "Stunden laufende Woche",
-                value: summary?.metrics.current_week_hours ?? 0,
-                suffix: "h",
-                icon: <Clock3 className="w-5 h-5" />,
-              },
               {
                 label: "Eingereichte Zettel",
                 value: summary?.metrics.submitted_timesheets ?? 0,
                 suffix: "",
                 icon: <CalendarClock className="w-5 h-5" />,
-              },
-              {
-                label: "Freizugeben",
-                value: summary?.metrics.ready_for_approval ?? 0,
-                suffix: "",
-                icon: <Users className="w-5 h-5" />,
-              },
-              {
-                label: "Zu prüfen",
-                value: summary?.metrics.ready_for_review ?? 0,
-                suffix: "",
-                icon: <ShieldCheck className="w-5 h-5" />,
               },
             ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -431,7 +475,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -497,7 +541,7 @@ export const CustomerPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    Zu prüfen
+                    Zu prÃ¼fen
                   </h2>
                   <div className="space-y-3">
                     {reviewTimesheets.map((timesheet) => (
@@ -510,7 +554,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                             {timesheet.employee_name}
                           </div>
                           <div className="text-sm text-slate-600">
-                            KW {timesheet.week_number}/{timesheet.week_year} ·{" "}
+                            KW {timesheet.week_number}/{timesheet.week_year} Â·{" "}
                             {timesheet.customer || "Kein Kunde"}
                           </div>
                           {timesheet.customer_comment && (
@@ -550,7 +594,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Prüfen
+                                PrÃ¼fen
                               </button>
                               <button
                                 type="button"
@@ -567,7 +611,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                     ))}
                     {reviewTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine zu prüfenden Stundenzettel.
+                        Aktuell keine zu prÃ¼fenden Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -582,38 +626,116 @@ export const CustomerPortalDashboard: React.FC = () => {
                   <thead>
                     <tr className="text-left text-slate-500 border-b border-slate-200">
                       <th className="py-2 pr-4">Mitarbeiter</th>
-                      <th className="py-2 pr-4">Zettel gesamt</th>
-                      <th className="py-2 pr-4">Stunden laufende Woche</th>
-                      <th className="py-2 pr-4">Abwesenheiten</th>
-                      <th className="py-2 pr-4">Status</th>
-                      <th className="py-2 pr-4">Laufende Woche vorhanden</th>
+                      <th className="py-2 pr-4">Zuletzt aktualisiert</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {employees.map((employee) => (
+                    {employeeOverview.map((employee) => (
                       <tr key={employee.employee_name} className="border-b border-slate-100">
                         <td className="py-3 pr-4 font-medium text-slate-900">
-                          {employee.employee_name}
-                        </td>
-                        <td className="py-3 pr-4">{employee.timesheet_count}</td>
-                        <td className="py-3 pr-4">{employee.current_week_hours}h</td>
-                        <td className="py-3 pr-4">{employee.current_absence_days}</td>
-                        <td className="py-3 pr-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              statusClasses[employee.latest_status] || statusClasses.open
-                            }`}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedEmployeeName((current) =>
+                                current === employee.employee_name.trim()
+                                  ? ""
+                                  : employee.employee_name.trim(),
+                              )
+                            }
+                            className="text-left text-sky-700 hover:text-sky-900 hover:underline underline-offset-2"
                           >
-                            {formatStatus(employee.latest_status)}
-                          </span>
+                            {employee.employee_name}
+                          </button>
                         </td>
                         <td className="py-3 pr-4">
-                          {employee.has_current_week_timesheet ? "Ja" : "Nein"}
+                          {employee.last_updated_at
+                            ? new Date(employee.last_updated_at).toLocaleString("de-DE")
+                            : "-"}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+
+                {selectedEmployeeName && (
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">
+                          Verlauf eingereichter Stundenzettel
+                        </h3>
+                        <p className="text-sm text-slate-600 mt-1">{selectedEmployeeName}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEmployeeName("")}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Schließen
+                      </button>
+                    </div>
+
+                    {selectedEmployeeTimesheets.length === 0 ? (
+                      <p className="text-sm text-slate-600">
+                        Für diesen Mitarbeiter gibt es aktuell keine eingereichten
+                        Stundenzettel.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-slate-500 border-b border-slate-200">
+                              <th className="py-2 pr-4">Woche</th>
+                              <th className="py-2 pr-4">Kunde</th>
+                              <th className="py-2 pr-4">Stunden</th>
+                              <th className="py-2 pr-4">Status</th>
+                              <th className="py-2 pr-4">Aktualisiert</th>
+                              <th className="py-2 pr-4">PDF</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedEmployeeTimesheets.map((timesheet) => (
+                              <tr key={timesheet.id} className="border-b border-slate-200/70">
+                                <td className="py-3 pr-4">
+                                  KW {timesheet.week_number}/{timesheet.week_year} · Zettel{" "}
+                                  {timesheet.sheet_id}
+                                </td>
+                                <td className="py-3 pr-4">
+                                  {timesheet.customer || "Kein Kunde"}
+                                </td>
+                                <td className="py-3 pr-4">{timesheet.hours_total}h</td>
+                                <td className="py-3 pr-4">
+                                  <span
+                                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                      statusClasses[timesheet.status] || statusClasses.open
+                                    }`}
+                                  >
+                                    {formatStatus(timesheet.status)}
+                                  </span>
+                                </td>
+                                <td className="py-3 pr-4">
+                                  {timesheet.updated_at
+                                    ? new Date(timesheet.updated_at).toLocaleString("de-DE")
+                                    : "-"}
+                                </td>
+                                <td className="py-3 pr-4">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleOpenPdfPreview(timesheet)}
+                                    className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    PDF ansehen
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
             )}
 
@@ -630,7 +752,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       <option value="">Alle Status</option>
                       <option value="open">Offen</option>
                       <option value="submitted">Eingereicht</option>
-                      <option value="reviewed">Geprüft</option>
+                      <option value="reviewed">GeprÃ¼ft</option>
                       <option value="approved">Freigegeben</option>
                       <option value="rejected">Abgelehnt</option>
                     </select>
@@ -666,7 +788,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                           {timesheet.employee_name}
                         </td>
                         <td className="py-3 pr-4">
-                          KW {timesheet.week_number}/{timesheet.week_year} · Zettel{" "}
+                          KW {timesheet.week_number}/{timesheet.week_year} Â· Zettel{" "}
                           {timesheet.sheet_id}
                         </td>
                         <td className="py-3 pr-4">{timesheet.customer || "Kein Kunde"}</td>
@@ -705,7 +827,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                                     className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"
                                   >
                                     <div className="font-medium text-slate-700">
-                                      {entry.actor || "Unbekannt"} ·{" "}
+                                      {entry.actor || "Unbekannt"} Â·{" "}
                                       {formatStatus(entry.status || entry.action)}
                                     </div>
                                     <div>{entry.timestamp}</div>
@@ -776,7 +898,7 @@ export const CustomerPortalDashboard: React.FC = () => {
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  Abwesenheitsübersicht
+                  AbwesenheitsÃ¼bersicht
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -815,7 +937,7 @@ export const CustomerPortalDashboard: React.FC = () => {
             {activeTab === "audit" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  Audit-Log Kundenportal
+                  Audit-Log Verwaltungsportal
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -847,7 +969,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                     {auditEntries.length === 0 && (
                       <tr>
                         <td colSpan={6} className="py-6 text-center text-slate-500">
-                          Noch keine Audit-Einträge vorhanden.
+                          Noch keine Audit-EintrÃ¤ge vorhanden.
                         </td>
                       </tr>
                     )}
@@ -869,7 +991,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                 </div>
                 <div className="text-sm text-slate-600">
                   {selectedTimesheet
-                    ? `${selectedTimesheet.employee_name} · KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
+                    ? `${selectedTimesheet.employee_name} Â· KW ${selectedTimesheet.week_number}/${selectedTimesheet.week_year}`
                     : "PDF wird vorbereitet..."}
                 </div>
               </div>
@@ -888,7 +1010,7 @@ export const CustomerPortalDashboard: React.FC = () => {
                       onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
                       className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                                Prüfen
+                                PrÃ¼fen
                     </button>
                     <button
                       type="button"
@@ -935,3 +1057,4 @@ export const CustomerPortalDashboard: React.FC = () => {
     </div>
   );
 };
+
