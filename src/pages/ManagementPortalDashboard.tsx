@@ -40,7 +40,7 @@ type SendHistoryEntry = {
 const statusLabels: Record<string, string> = {
   open: "Offen",
   submitted: "Eingereicht",
-  reviewed: "Geprueft",
+  reviewed: "Geprüft",
   approved: "Freigegeben",
   rejected: "Abgelehnt",
 };
@@ -61,7 +61,7 @@ function formatPortalQueue(portalQueue?: string, status?: string): string {
   if (status !== "submitted") {
     return "-";
   }
-  return portalQueue === "review" ? "Zu pruefen" : "Freizugeben";
+  return portalQueue === "review" ? "Prüfung" : "Freigabe";
 }
 
 function getCurrentIsoWeek(): { week: number; year: number } {
@@ -106,7 +106,7 @@ export const ManagementPortalDashboard: React.FC = () => {
       ]);
 
       if (!summaryResponse.success) {
-        throw new Error(summaryResponse.error || "Portal-Uebersicht konnte nicht geladen werden");
+        throw new Error(summaryResponse.error || "Portal-Übersicht konnte nicht geladen werden");
       }
       if (!employeesResponse.success) {
         throw new Error(employeesResponse.error || "Mitarbeiterliste konnte nicht geladen werden");
@@ -320,7 +320,7 @@ export const ManagementPortalDashboard: React.FC = () => {
   ) => {
     const comment =
       status !== "approved"
-        ? window.prompt("Optionalen Kommentar fuer den Kundenverlauf eingeben:", "") || ""
+        ? window.prompt("Optionalen Kommentar für den Kundenverlauf eingeben:", "") || ""
         : "";
     const rejectionReason =
       status === "rejected"
@@ -525,7 +525,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                 )}
                 {item.onClick && (
                   <div className="text-xs text-slate-500 mt-3">
-                    Konzept ansehen und geplante Kommunikation erklaeren
+                    Konzept ansehen und geplante Kommunikation erklären
                   </div>
                 )}
               </button>
@@ -642,7 +642,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     ))}
                     {releasedTimesheets.length === 0 && (
                       <div className="text-sm text-slate-500">
-                        Aktuell keine vollstaendig unterschriebenen eingereichten Stundenzettel.
+                        Aktuell keine vollständig unterschriebenen eingereichten Stundenzettel.
                       </div>
                     )}
                   </div>
@@ -650,7 +650,7 @@ export const ManagementPortalDashboard: React.FC = () => {
 
                 <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
                   <h2 className="text-lg font-bold text-slate-900 mb-4">
-                    In Pruefung
+                    In Prüfung
                   </h2>
                   <div className="space-y-3">
                     {inReviewTimesheets.map((timesheet) => (
@@ -703,7 +703,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                 onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                 className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                               >
-                                Pruefen
+                                Prüfen
                               </button>
                               <button
                                 type="button"
@@ -776,8 +776,8 @@ export const ManagementPortalDashboard: React.FC = () => {
                       </h3>
                       <p className="text-sm text-slate-600 mt-1">
                         {selectedEmployeeName
-                          ? "Verlauf fuer den ausgewaehlten Mitarbeiter"
-                          : "Mitarbeiter aus der Liste auswaehlen, um den Verlauf zu sehen"}
+                          ? "Verlauf für den ausgewählten Mitarbeiter"
+                          : "Mitarbeiter aus der Liste auswählen, um den Verlauf zu sehen"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-3">
@@ -789,7 +789,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                         <option value="">Alle Status</option>
                         <option value="open">Offen</option>
                         <option value="submitted">Eingereicht</option>
-                        <option value="reviewed">Geprueft</option>
+                        <option value="reviewed">Geprüft</option>
                         <option value="approved">Freigegeben</option>
                         <option value="rejected">Abgelehnt</option>
                       </select>
@@ -869,7 +869,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                       onClick={() => void handleReviewAction(timesheet.id, "reviewed")}
                                       className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
                                     >
-                                      Pruefen
+                                      Prüfen
                                     </button>
                                     <button
                                       type="button"
@@ -896,7 +896,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                                 colSpan={canApprove ? 7 : 6}
                                 className="py-6 text-center text-slate-500"
                               >
-                                Fuer diesen Mitarbeiter wurden keine Stundenzettel gefunden.
+                                Für diesen Mitarbeiter wurden keine Stundenzettel gefunden.
                               </td>
                             </tr>
                           )}
@@ -905,7 +905,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                      Bitte einen Mitarbeiter aus der Liste auswaehlen.
+                      Bitte einen Mitarbeiter aus der Liste auswählen.
                     </div>
                   )}
                 </div>
@@ -915,7 +915,7 @@ export const ManagementPortalDashboard: React.FC = () => {
             {activeTab === "absences" && (
               <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 overflow-x-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">
-                  Abwesenheitsuebersicht
+                  Abwesenheitsübersicht
                 </h2>
                 <table className="min-w-full text-sm">
                   <thead>
@@ -993,7 +993,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                       <th className="py-2 pr-4">Kunde</th>
                       <th className="py-2 pr-4">Gesendet an</th>
                       <th className="py-2 pr-4">Aktueller Status</th>
-                      <th className="py-2 pr-4">Letzte Aktivitaet</th>
+                      <th className="py-2 pr-4">Letzte Aktivität</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1028,7 +1028,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                     {sendHistoryEntries.length === 0 && (
                       <tr>
                         <td colSpan={7} className="py-6 text-center text-slate-500">
-                          Keine Eintraege im Sendeverlauf vorhanden.
+                          Keine Einträge im Sendeverlauf vorhanden.
                         </td>
                       </tr>
                     )}
@@ -1069,7 +1069,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                       onClick={() => void handleReviewAction(selectedTimesheet.id, "reviewed")}
                       className="rounded-2xl border border-sky-300 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                                Pruefen
+                                Prüfen
                     </button>
                     <button
                       type="button"
@@ -1092,7 +1092,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                   onClick={closePdfPreview}
                   className="rounded-2xl bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-black"
                 >
-                  Schliessen
+                  Schließen
                 </button>
               </div>
             </div>
@@ -1121,7 +1121,7 @@ export const ManagementPortalDashboard: React.FC = () => {
               <div>
                 <div className="text-lg font-bold text-slate-900">Prototyp Mitarbeiter-Chat</div>
                 <div className="text-sm text-slate-600 mt-1">
-                  Zukuenftige Direktkommunikation zwischen Verwaltung und Mitarbeiter-App
+                  Zukünftige Direktkommunikation zwischen Verwaltung und Mitarbeiter-App
                 </div>
               </div>
               <button
@@ -1129,7 +1129,7 @@ export const ManagementPortalDashboard: React.FC = () => {
                 onClick={() => setShowChatPrototype(false)}
                 className="rounded-2xl bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-black"
               >
-                Schliessen
+                Schließen
               </button>
             </div>
 
@@ -1139,10 +1139,10 @@ export const ManagementPortalDashboard: React.FC = () => {
                   Geplante Funktion
                 </div>
                 <p className="text-sm text-slate-700 leading-6">
-                  Der Mitarbeiter-Chat soll Rueckfragen zu Stundenzetteln, Hinweisen zu Einsaetzen,
+                  Der Mitarbeiter-Chat soll Rückfragen zu Stundenzetteln, Hinweisen zu Einsätzen,
                   Freigaben, Unterlagen und kurzfristige Verwaltungsnachrichten direkt zwischen
                   Portal und Mitarbeiter-App austauschen. Nachrichten aus dem Verwaltungsportal
-                  koennen dabei automatisch per Webhook angestossen und in die App des
+                  können dabei automatisch per Webhook angestoßen und in die App des
                   Mitarbeiters zugestellt werden.
                 </p>
               </section>
@@ -1150,11 +1150,11 @@ export const ManagementPortalDashboard: React.FC = () => {
               <section className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-base font-bold text-slate-900 mb-2">
-                    Was der Chat spaeter koennen soll
+                    Was der Chat später können soll
                   </div>
                   <ul className="space-y-2 text-sm text-slate-700">
-                    <li>Direkte Rueckfragen zu einem konkreten Stundenzettel</li>
-                    <li>Benachrichtigungen bei Freigabe, Ablehnung oder Pruefung</li>
+                    <li>Direkte Rückfragen zu einem konkreten Stundenzettel</li>
+                    <li>Benachrichtigungen bei Freigabe, Ablehnung oder Prüfung</li>
                     <li>Versand von Einsatzinfos, Dokumenten und organisatorischen Hinweisen</li>
                     <li>Saubere Zuordnung der Kommunikation zu Mitarbeiter und Vorgang</li>
                   </ul>
@@ -1162,24 +1162,42 @@ export const ManagementPortalDashboard: React.FC = () => {
 
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-base font-bold text-slate-900 mb-2">
-                    Warum Matrix als Grundlage
+                    Vorteile für den Mitarbeiter
                   </div>
                   <ul className="space-y-2 text-sm text-slate-700">
-                    <li>Offener Standard statt proprietaerer Messenger-Abhaengigkeit</li>
-                    <li>Eigener Serverbetrieb fuer DSGVO-konforme Datenhaltung</li>
-                    <li>Gute Eignung fuer sichere App-zu-Portal-Kommunikation</li>
-                    <li>Webhook- und Bot-Anbindung fuer automatisierte Prozesse</li>
+                    <li>Echtzeit-Chat direkt aus der Mitarbeiter-App ohne Umwege</li>
+                    <li>Schnelle Rückfragen zu Schichten, Stundenbelegen und Freigaben</li>
+                    <li>Sichere und nachvollziehbar auditierte Kommunikation</li>
+                    <li>Klare Zuordnung aller Nachrichten zum richtigen Vorgang</li>
                   </ul>
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-                <div className="text-base font-bold text-slate-900 mb-2">Marketing-Satz</div>
-                <p className="text-sm text-slate-700 leading-6">
-                  Der geplante Matrix-basierte Mitarbeiter-Chat verbindet Verwaltung und App in
-                  einem sicheren, DSGVO-konformen Kommunikationskanal, der schnell, direkt und
-                  voll unter eigener Kontrolle bleibt.
-                </p>
+              <section className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-base font-bold text-slate-900 mb-2">
+                    Warum Matrix als Grundlage
+                  </div>
+                  <ul className="space-y-2 text-sm text-slate-700">
+                    <li>Offener Standard statt proprietärer Messenger-Abhängigkeit</li>
+                    <li>Eigener Serverbetrieb für DSGVO-konforme Datenhaltung</li>
+                    <li>Gute Eignung für sichere App-zu-Portal-Kommunikation</li>
+                    <li>Webhook- und Bot-Anbindung für automatisierte Prozesse</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <div className="text-base font-bold text-slate-900 mb-2">
+                    Was Kunden hier künftig erwartet
+                  </div>
+                  <p className="text-sm text-slate-700 leading-6">
+                    Kunden erhalten hier künftig einen direkten Kommunikationsbereich für
+                    Rückfragen, Abstimmungen und Hinweise rund um Stundenzettel, Freigaben und
+                    Einsätze. Die Verbindung über Matrix schafft dafür einen sicheren,
+                    DSGVO-konformen Kanal, der zuverlässig zwischen Verwaltungsportal und
+                    Mitarbeiter-App vermittelt.
+                  </p>
+                </div>
               </section>
             </div>
           </div>
