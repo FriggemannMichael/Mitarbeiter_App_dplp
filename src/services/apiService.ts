@@ -539,12 +539,6 @@ class ApiService {
     if (response.success && response.data?.csrf_token) {
       this.setEmployeeCsrfToken(response.data.csrf_token);
     }
-    if (response.success && !response.data?.employee) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("employee_session_token");
-      }
-      this.setEmployeeCsrfToken("");
-    }
     return response;
   }
 

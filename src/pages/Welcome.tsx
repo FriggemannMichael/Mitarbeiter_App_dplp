@@ -104,7 +104,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
       window.setTimeout(resolve, ms);
     });
 
-  const resolveAuthenticatedSession = async (): Promise<EmployeeSessionDto> => {
+  const resolveAuthenticatedSession = async (
+    fallbackSession: EmployeeSessionDto,
+  ): Promise<EmployeeSessionDto> => {
     for (const retryDelayMs of SESSION_RETRY_DELAYS_MS) {
       if (retryDelayMs > 0) {
         await delay(retryDelayMs);
@@ -121,10 +123,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
       }
     }
 
-    throw new Error(
-      t("welcome.error.sessionPending") ||
-        "Anmeldung erfolgreich, aber Sitzungsdaten konnten noch nicht geladen werden. Bitte kurz erneut versuchen.",
-    );
+    return fallbackSession;
   };
 
   const completeAuthentication = (session: EmployeeSessionDto) => {
@@ -177,7 +176,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         if (!response.success || !employee) {
           throw new Error(response.error || t("welcome.error.register") || "Registrierung fehlgeschlagen");
         }
-        completeAuthentication(await resolveAuthenticatedSession());
+        completeAuthentication(await resolveAuthenticatedSession(employee));
       } else if (mode === "login") {
         const response = await apiService.loginEmployee({
           firstName: firstName.trim(),
@@ -190,7 +189,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
           throw new Error(response.error || t("welcome.error.login") || "Anmeldung fehlgeschlagen");
         }
         setLoginNeedsPhoneNumber(false);
-        completeAuthentication(await resolveAuthenticatedSession());
+        completeAuthentication(await resolveAuthenticatedSession(employee));
       } else {
         const response = await apiService.resetEmployeePin({
           firstName: firstName.trim(),
@@ -202,7 +201,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
         if (!response.success || !employee) {
           throw new Error(response.error || t("welcome.error.resetPin") || "PIN konnte nicht zurückgesetzt werden");
         }
-        completeAuthentication(await resolveAuthenticatedSession());
+        completeAuthentication(await resolveAuthenticatedSession(employee));
       }
     } catch (submitErrorValue) {
       const errorCode =
