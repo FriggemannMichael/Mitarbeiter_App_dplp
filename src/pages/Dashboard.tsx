@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Clock,
@@ -25,6 +25,23 @@ import { storage, weekUtils } from "../utils/storage";
 import { useConfig } from "../contexts/ConfigContext";
 import { PageHeader } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { isFeatureEnabled } from "../utils/featureFlags";
+import { apiService } from "../services/apiService";
+import type { WeekData } from "../types/weekdata.types";
+
+type DashboardSheetSummary = {
+  sheetId: number;
+  customer: string;
+  hours: number;
+  locked: boolean;
+};
+
+type DashboardWeekSummary = {
+  week: number;
+  year: number;
+  sheets: DashboardSheetSummary[];
+  totalHours: number;
+};
 
 interface DashboardProps {
   employeeName: string;
@@ -41,28 +58,82 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToWeek,
 }) => {
   const { t, i18n } = useTranslation();
-  const { config } = useConfig();
+  const { config, isLoading: isConfigLoading } = useConfig();
+  const showSickDashboardCard = isFeatureEnabled(
+    config?.technical,
+    "dashboard_show_sick",
+    true
+  );
+  const showVacationDashboardCard = isFeatureEnabled(
+    config?.technical,
+    "dashboard_show_vacation",
+    true
+  );
   const [showMenu, setShowMenu] = useState(false);
+  const [backendWeeks, setBackendWeeks] = useState<WeekData[] | null>(null);
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     storage.getTheme()
   );
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showPhoneUpdateModal, setShowPhoneUpdateModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [phoneUpdatePin, setPhoneUpdatePin] = useState("");
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
+  const [phoneUpdateError, setPhoneUpdateError] = useState("");
+  const [phoneUpdateSuccess, setPhoneUpdateSuccess] = useState("");
+  const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<{
     week: number;
     year: number;
-    sheets: Array<{
-      sheetId: number;
-      customer: string;
-      hours: number;
-      locked: boolean;
-    }>;
+    sheets: DashboardSheetSummary[];
     totalHours: number;
   } | null>(null);
 
   const handleDeleteAllData = () => {
     storage.clearAllData();
     window.location.reload();
+  };
+
+  const handleUpdatePhoneNumber = async () => {
+    setPhoneUpdateError("");
+    setPhoneUpdateSuccess("");
+
+    const normalizedPhoneNumber = newPhoneNumber.trim();
+    const normalizedPin = phoneUpdatePin.trim();
+
+    if (!normalizedPhoneNumber) {
+      setPhoneUpdateError(t("settings.phoneUpdate.requiredPhone") || "Bitte geben Sie eine neue Handynummer ein.");
+      return;
+    }
+    if (!/^\d{4}$/.test(normalizedPin)) {
+      setPhoneUpdateError(t("settings.phoneUpdate.requiredPin") || "Bitte geben Sie Ihre 4-stellige PIN ein.");
+      return;
+    }
+
+    setIsUpdatingPhone(true);
+    try {
+      const response = await apiService.updateEmployeePhone({
+        phoneNumber: normalizedPhoneNumber,
+        pin: normalizedPin,
+      });
+      if (!response.success) {
+        throw new Error(response.error || (t("settings.phoneUpdate.error") || "Handynummer konnte nicht geändert werden."));
+      }
+
+      setPhoneUpdateSuccess(
+        t("settings.phoneUpdate.success") || "Handynummer wurde erfolgreich aktualisiert.",
+      );
+      setPhoneUpdatePin("");
+      setNewPhoneNumber("");
+    } catch (updateError) {
+      setPhoneUpdateError(
+        updateError instanceof Error
+          ? updateError.message
+          : t("settings.phoneUpdate.error") || "Handynummer konnte nicht geändert werden.",
+      );
+    } finally {
+      setIsUpdatingPhone(false);
+    }
   };
 
   const availableLanguages = [
@@ -100,19 +171,80 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const currentWeek = currentWeekData.week;
   const currentYear = currentWeekData.year;
 
+  useEffect(() => {
+    if (isConfigLoading) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadDashboardWeeks = async () => {
+      try {
+        const response = await apiService.listTimesheets<WeekData>({
+          limit: 64,
+        });
+        if (!response.success || !Array.isArray(response.data)) {
+          return;
+        }
+
+        const weeks = response.data
+          .map((item) => item.weekData)
+          .filter((weekData): weekData is WeekData => Boolean(weekData));
+
+        weeks.forEach((weekData) => {
+          storage.setWeekData(
+            weekData.year,
+            weekData.week,
+            weekData as import("../utils/storage").WeekData,
+            weekData.sheetId ?? 1,
+          );
+        });
+
+        if (!isCancelled) {
+          setBackendWeeks(weeks);
+        }
+      } catch {
+        // localStorage fallback remains active
+      }
+    };
+
+    void loadDashboardWeeks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isConfigLoading]);
+
+  const localStoredWeeks = useMemo(
+    () =>
+      storage
+      .getAllStoredWeeks()
+      .filter((week) => week.employeeName === employeeName),
+    [employeeName],
+  );
+
+  const sourceWeeks = useMemo(() => {
+    if (backendWeeks === null) {
+      return localStoredWeeks;
+    }
+
+    const mergedWeeks = new Map<string, WeekData>();
+
+    localStoredWeeks.forEach((week) => {
+      mergedWeeks.set(`${week.year}-${week.week}-${week.sheetId ?? 1}`, week);
+    });
+
+    backendWeeks.forEach((week) => {
+      mergedWeeks.set(`${week.year}-${week.week}-${week.sheetId ?? 1}`, week);
+    });
+
+    return Array.from(mergedWeeks.values());
+  }, [backendWeeks, localStoredWeeks]);
+
   // Wochendaten laden (mit allen Zetteln pro Woche)
   const weekData = useMemo(() => {
-    const weeks: Array<{
-      week: number;
-      year: number;
-      sheets: Array<{
-        sheetId: number;
-        customer: string;
-        hours: number;
-        locked: boolean;
-      }>;
-      totalHours: number;
-    }> = [];
+
+    const weeks: DashboardWeekSummary[] = [];
 
     const currentMonday = weekUtils.getMonday(currentYear, currentWeek);
 
@@ -158,52 +290,81 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return weeks.filter((w) => w.sheets.length > 0);
   }, [currentWeek, currentYear, t]);
 
+  const backendWeekData = useMemo(() => {
+    const groupedWeeks = new Map<string, DashboardWeekSummary>();
+
+    sourceWeeks.forEach((sheet) => {
+      const key = `${sheet.year}-${sheet.week}`;
+      const sheetHours = sheet.days.reduce((sum, day) => {
+        const [hours, minutes] = day.hours.split(":").map(Number);
+        return sum + hours + minutes / 60;
+      }, 0);
+
+      const existingWeek = groupedWeeks.get(key) ?? {
+        week: sheet.week,
+        year: sheet.year,
+        sheets: [],
+        totalHours: 0,
+      };
+
+      existingWeek.sheets.push({
+        sheetId: sheet.sheetId ?? 1,
+        customer: sheet.customer || t("dashboard.noCustomer") || "Kein Kunde",
+        hours: sheetHours,
+        locked: sheet.locked || false,
+      });
+      existingWeek.totalHours += sheetHours;
+
+      groupedWeeks.set(key, existingWeek);
+    });
+
+    return Array.from(groupedWeeks.values())
+      .map((week) => ({
+        ...week,
+        sheets: week.sheets.sort((a, b) => a.sheetId - b.sheetId),
+      }))
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.week - a.week;
+      })
+      .slice(0, 4);
+  }, [sourceWeeks, t]);
+
+  const effectiveWeekData =
+    backendWeekData.length > 0 || backendWeeks !== null ? backendWeekData : weekData;
+
   // Statistiken berechnen
   const stats = useMemo(() => {
-    const thisWeek = weekData[0]; // Erste Woche ist jetzt die aktuelle
+    const thisWeek =
+      effectiveWeekData.find(
+        (week) => week.week === currentWeek && week.year === currentYear,
+      ) || effectiveWeekData[0];
 
     // Monatsstunden berechnen (aktueller Monat)
     const currentMonth = new Date().getMonth();
-    const monthHours = weekData.reduce((sum, w) => {
-      // Prüfe ob Woche im aktuellen Monat liegt
-      const weekDate = new Date(w.year, 0, 1 + (w.week - 1) * 7);
-      if (weekDate.getMonth() === currentMonth) {
-        return sum + w.totalHours;
-      }
-      return sum;
-    }, 0);
+    let monthHours = 0;
 
     // Kranktage und Urlaubstage zählen (aktueller Monat)
     let sickDays = 0;
     let vacationDays = 0;
 
-    // Alle Zettel durchgehen
-    const currentMonday = weekUtils.getMonday(currentYear, currentWeek);
-    for (let i = 0; i < 8; i++) {
-      const monday = new Date(currentMonday);
-      monday.setDate(currentMonday.getDate() - i * 7);
-      const thursday = new Date(monday);
-      thursday.setDate(monday.getDate() + 3);
-      const year = thursday.getFullYear();
-      const week = weekUtils.getWeekNumber(monday);
-
-      const sheets = storage.getAllSheetsForWeek(year, week);
-      sheets.forEach((sheet) => {
-        sheet.days.forEach((day) => {
-          const dayDate = new Date(day.date);
-          if (
-            dayDate.getMonth() === currentMonth &&
-            dayDate.getFullYear() === currentYear
-          ) {
-            if (day.absence === "sick") sickDays++;
-            if (day.absence === "vacation") vacationDays++;
-          }
-        });
+    sourceWeeks.forEach((sheet) => {
+      sheet.days.forEach((day) => {
+        const dayDate = new Date(day.date);
+        if (
+          dayDate.getMonth() === currentMonth &&
+          dayDate.getFullYear() === currentYear
+        ) {
+          const [hours, minutes] = day.hours.split(":").map(Number);
+          monthHours += hours + minutes / 60;
+          if (day.absence === "sick") sickDays++;
+          if (day.absence === "vacation") vacationDays++;
+        }
       });
-    }
+    });
 
     // Offene Wochen (ohne Unterschrift) – aktuelle Woche ausschließen, die ist noch in Bearbeitung
-    const openWeeks = weekData.filter((w) =>
+    const openWeeks = effectiveWeekData.filter((w) =>
       !(w.week === currentWeek && w.year === currentYear) &&
       w.sheets.some((s) => !s.locked)
     ).length;
@@ -215,7 +376,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       vacationDays,
       openWeeks,
     };
-  }, [weekData, currentWeek, currentYear]);
+  }, [effectiveWeekData, sourceWeeks, currentWeek, currentYear]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -313,6 +474,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <button
                     onClick={() => {
                       setShowMenu(false);
+                      setPhoneUpdateError("");
+                      setPhoneUpdateSuccess("");
+                      setPhoneUpdatePin("");
+                      setNewPhoneNumber("");
+                      setShowPhoneUpdateModal(true);
+                    }}
+                    className="header-menu-action w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 font-medium transition-colors"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>{t("settings.phoneUpdate.action") || "Handynummer ändern"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
                       onLogout?.();
                     }}
                     className="header-menu-action w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center space-x-3 text-slate-700 font-medium transition-colors"
@@ -404,51 +580,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </motion.div>
 
-          {/* Kranktage */}
-          <motion.div
-            variants={item}
-            className={metricCardBase}
-          >
-            <div className="mb-4 flex justify-center">
-              <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
-                <AlertCircle className="w-5 h-5 text-primary-600" />
+          {showSickDashboardCard && (
+            <motion.div
+              variants={item}
+              className={metricCardBase}
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-primary-600" />
+                </div>
               </div>
-            </div>
-            <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
-              {stats.sickDays}
-              <span className="text-sm font-medium text-slate-500 ml-1">
-                {stats.sickDays === 1 ? "Tag" : "Tage"}
-              </span>
-            </p>
-            <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
-              {t("absence.sick") || "Krank"}
-            </p>
-          </motion.div>
+              <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
+                {stats.sickDays}
+                <span className="text-sm font-medium text-slate-500 ml-1">
+                  {stats.sickDays === 1 ? "Tag" : "Tage"}
+                </span>
+              </p>
+              <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
+                {t("absence.sick") || "Krank"}
+              </p>
+            </motion.div>
+          )}
 
-          {/* Urlaubstage */}
-          <motion.div
-            variants={item}
-            className={metricCardBase}
-          >
-            <div className="mb-4 flex justify-center">
-              <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
-                <CheckCircle2 className="w-5 h-5 text-primary-600" />
+          {showVacationDashboardCard && (
+            <motion.div
+              variants={item}
+              className={metricCardBase}
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="w-12 h-12 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="w-5 h-5 text-primary-600" />
+                </div>
               </div>
-            </div>
-            <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
-              {stats.vacationDays}
-              <span className="text-sm font-medium text-slate-500 ml-1">
-                {stats.vacationDays === 1 ? "Tag" : "Tage"}
-              </span>
-            </p>
-            <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
-              {t("absence.vacation") || "Urlaub"}
-            </p>
-          </motion.div>
+              <p className="text-3xl font-bold tracking-tight text-slate-900 text-center">
+                {stats.vacationDays}
+                <span className="text-sm font-medium text-slate-500 ml-1">
+                  {stats.vacationDays === 1 ? "Tag" : "Tage"}
+                </span>
+              </p>
+              <p className="text-sm font-semibold text-slate-600 mt-1 text-center">
+                {t("absence.vacation") || "Urlaub"}
+              </p>
+            </motion.div>
+          )}
 
           {/* Offene Wochen – Handlungsaufforderung */}
           {(() => {
-            const currentWeekRunning = weekData.some(
+            const currentWeekRunning = effectiveWeekData.some(
               (w) => w.week === currentWeek && w.year === currentYear && w.sheets.some((s) => !s.locked)
             );
 
@@ -458,7 +636,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <motion.button
                   variants={item}
                   onClick={() => {
-                    const firstOpen = weekData.find(
+                    const firstOpen = effectiveWeekData.find(
                       (w) => !(w.week === currentWeek && w.year === currentYear) && w.sheets.some((s) => !s.locked)
                     );
                     if (firstOpen) setSelectedWeek(firstOpen);
@@ -472,18 +650,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="flex-1">
                       <p className="text-sm sm:text-base font-bold text-slate-900">
                         {stats.openWeeks === 1
-                          ? "1 Stundenzettel noch nicht unterschrieben!"
-                          : `${stats.openWeeks} Stundenzettel noch nicht unterschrieben!`}
+                          ? t("dashboard.pendingSheets.one") ||
+                            "1 Stundenzettel noch nicht unterschrieben!"
+                          : t("dashboard.pendingSheets.many", {
+                              count: stats.openWeeks,
+                            }) ||
+                            `${stats.openWeeks} Stundenzettel noch nicht unterschrieben!`}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Jetzt antippen und abzeichnen →
+                        {t("dashboard.pendingSheets.cta") ||
+                          "Jetzt antippen und abzeichnen ->"}
                       </p>
                     </div>
                   </div>
                 </motion.button>
               );
             } else if (currentWeekRunning) {
-              // Aktuelle Woche läuft noch, keine alten Rückstände → neutral
+              // Aktuelle Woche läuft noch, keine alten Rückstände -> neutral
               return (
                 <motion.div
                   variants={item}
@@ -495,10 +678,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <div>
                       <p className="text-sm sm:text-base font-bold text-slate-900">
-                        Aktuelle Woche läuft noch
+                        {t("dashboard.currentWeekRunning.title") ||
+                          "Aktuelle Woche läuft noch"}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Keine alten offenen Zettel – alles im grünen Bereich.
+                        {t("dashboard.currentWeekRunning.desc") ||
+                          "Keine alten offenen Zettel - alles im grünen Bereich."}
                       </p>
                     </div>
                   </div>
@@ -517,10 +702,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <div>
                       <p className="text-sm sm:text-base font-bold text-slate-900">
-                        Alle Stundenzettel unterschrieben!
+                        {t("dashboard.allSigned.title") || "Alle Stundenzettel unterschrieben!"}
                       </p>
                       <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                        Nichts zu tun – alles erledigt.
+                        {t("dashboard.allSigned.desc") ||
+                          "Nichts zu tun - alles erledigt."}
                       </p>
                     </div>
                   </div>
@@ -556,8 +742,106 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </motion.button>
 
-        {/* Kontakt Modal */}
+        {/* Kontakt- und Profilmodale */}
         <AnimatePresence>
+          {showPhoneUpdateModal && (
+            <div
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+              onClick={() => setShowPhoneUpdateModal(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 border border-slate-200/80"
+              >
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center">
+                      <Phone className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {t("settings.phoneUpdate.title") || "Handynummer ändern"}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setShowPhoneUpdateModal(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100"
+                  >
+                    <X className="w-5 h-5 text-slate-600" />
+                  </button>
+                </div>
+
+                <div className="p-4 sm:p-6 space-y-4">
+                  <p className="text-sm text-slate-600">
+                    {t("settings.phoneUpdate.description") || "Aktualisieren Sie Ihre Handynummer, damit PIN-Zurücksetzen und die eindeutige Zuordnung weiterhin funktionieren."}
+                  </p>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("settings.phoneUpdate.newPhone") || "Neue Handynummer"}
+                    </span>
+                    <input
+                      type="tel"
+                      value={newPhoneNumber}
+                      onChange={(e) => setNewPhoneNumber(e.target.value)}
+                      className="input-field mt-2"
+                      placeholder={t("welcome.placeholders.phoneNumber") || "z. B. 0176 12345678"}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("settings.phoneUpdate.pin") || "Aktuelle PIN"}
+                    </span>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={phoneUpdatePin}
+                      onChange={(e) => setPhoneUpdatePin(e.target.value.replace(/\D+/g, "").slice(0, 4))}
+                      className="input-field mt-2"
+                      placeholder="••••"
+                    />
+                  </label>
+
+                  {phoneUpdateError && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {phoneUpdateError}
+                    </div>
+                  )}
+
+                  {phoneUpdateSuccess && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                      {phoneUpdateSuccess}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 px-4 sm:px-6 pb-4 sm:pb-6">
+                  <button
+                    onClick={() => setShowPhoneUpdateModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    {t("common.cancel") || "Abbrechen"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      void handleUpdatePhoneNumber();
+                    }}
+                    disabled={isUpdatingPhone}
+                    className="px-4 py-2 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingPhone
+                      ? t("settings.phoneUpdate.saving") || "Speichern..."
+                      : t("settings.phoneUpdate.save") || "Speichern"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
           {showContactModal && (
             <div
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
@@ -710,12 +994,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {t("dashboard.weekOverview") || "Wochenübersicht"}
           </h3>
           <div className="space-y-2">
-            {weekData.length === 0 && (
+            {effectiveWeekData.length === 0 && (
               <div className="text-center py-8 text-slate-400 text-sm">
                 {t("dashboard.noWeeks") || "Noch keine Stunden erfasst"}
               </div>
             )}
-            {weekData.map((week, index) => {
+            {effectiveWeekData.map((week, index) => {
               const targetHours = config.work.max_work_hours_per_day * 5;
               const percentage = Math.min(
                 (week.totalHours / targetHours) * 100,

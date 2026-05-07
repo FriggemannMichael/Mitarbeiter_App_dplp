@@ -11,8 +11,9 @@ interface AccountManagementFormProps {
 const ROLE_OPTIONS = [
   { value: "dispatcher", label: "Dispatcher" },
   { value: "branch_manager", label: "Branch Manager" },
-  { value: "backoffice", label: "Backoffice" },
-  { value: "customer_admin", label: "Customer Admin" },
+  { value: "backoffice", label: "Verwaltung" },
+  { value: "viewer", label: "Viewer" },
+  { value: "customer_admin", label: "Administrator" },
   { value: "platform_owner", label: "Platform Owner" },
 ];
 

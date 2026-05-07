@@ -1,11 +1,19 @@
 /**
- * Formular für technische Konfiguration
+ * Formular fuer technische Konfiguration
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { configService } from "../../services/configService";
 import type { TechnicalConfig } from "../../types/config.types";
-import { Cog, Save, Link as LinkIcon, QrCode, Globe } from "lucide-react";
+import {
+  Cog,
+  Save,
+  Link as LinkIcon,
+  QrCode,
+  Globe,
+  Plus,
+  Trash2,
+} from "lucide-react";
 
 interface TechnicalConfigFormProps {
   config: TechnicalConfig;
@@ -13,27 +21,131 @@ interface TechnicalConfigFormProps {
   onReload: () => Promise<void>;
 }
 
+interface FeatureFlagDefinition {
+  key: string;
+  label: string;
+  description: string;
+}
+
+interface CustomFeatureFlagRow {
+  id: string;
+  key: string;
+  value: boolean;
+}
+
+const KNOWN_FEATURE_FLAGS: FeatureFlagDefinition[] = [
+  {
+    key: "vacation_enabled",
+    label: "Urlaubsantrag aktiv",
+    description: "Blendet den Urlaubsantrag in der App ein und erlaubt dessen Nutzung.",
+  },
+  {
+    key: "advance_payment_enabled",
+    label: "Vorschuss aktiv",
+    description: "Erlaubt Mitarbeitern, Vorschussanfragen in der App zu erfassen.",
+  },
+  {
+    key: "dashboard_show_sick",
+    label: "Krankmeldung im Dashboard",
+    description: "Zeigt die Krankmeldungs-Kachel direkt im Dashboard an.",
+  },
+  {
+    key: "dashboard_show_vacation",
+    label: "Urlaub im Dashboard",
+    description: "Zeigt die Urlaubs-Kachel direkt im Dashboard an.",
+  },
+  {
+    key: "simple_dayshift_absence_with_job_fields",
+    label: "Tagschicht: Abwesenheit & Auftragsfelder",
+    description: "Aktiviert in der Tagschicht vereinfachte Abwesenheitserfassung sowie Auftrags- und Kommissionsnummer-Felder.",
+  },
+];
+
+const buildCustomFlagRows = (
+  flags: Record<string, boolean>,
+): CustomFeatureFlagRow[] =>
+  Object.entries(flags)
+    .filter(([key]) => !KNOWN_FEATURE_FLAGS.some((flag) => flag.key === key))
+    .map(([key, value], index) => ({
+      id: `${key}-${index}`,
+      key,
+      value,
+    }));
+
+const normalizeFeatureFlags = (
+  knownFlags: Record<string, boolean>,
+  customFlags: CustomFeatureFlagRow[],
+): Record<string, boolean> => {
+  const mergedFlags: Record<string, boolean> = { ...knownFlags };
+
+  for (const item of customFlags) {
+    const trimmedKey = item.key.trim();
+    if (!trimmedKey) {
+      continue;
+    }
+
+    mergedFlags[trimmedKey] = item.value;
+  }
+
+  return mergedFlags;
+};
+
 export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
   config,
   onSave,
   onReload,
 }) => {
   const [formData, setFormData] = useState(config);
-  const [featureFlagsText, setFeatureFlagsText] = useState("{}");
+  const [knownFeatureFlags, setKnownFeatureFlags] = useState<Record<string, boolean>>({});
+  const [customFeatureFlags, setCustomFeatureFlags] = useState<CustomFeatureFlagRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    const featureFlags = config.feature_flags || {};
+
     setFormData({
       ...config,
       cors_allowed_origins: config.cors_allowed_origins || [],
     });
-    setFeatureFlagsText(
-      JSON.stringify(config.feature_flags || {}, null, 2),
+    setKnownFeatureFlags(
+      Object.fromEntries(
+        KNOWN_FEATURE_FLAGS.map((flag) => [flag.key, Boolean(featureFlags[flag.key])]),
+      ),
     );
+    setCustomFeatureFlags(buildCustomFlagRows(featureFlags));
   }, [config]);
 
-  const handleChange = (field: keyof TechnicalConfig, value: any) => {
+  const handleChange = (field: keyof TechnicalConfig, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleKnownFlagChange = (key: string, value: boolean) => {
+    setKnownFeatureFlags((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCustomFlagChange = (
+    id: string,
+    field: "key" | "value",
+    value: string | boolean,
+  ) => {
+    setCustomFeatureFlags((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    );
+  };
+
+  const handleAddCustomFlag = () => {
+    setCustomFeatureFlags((prev) => [
+      ...prev,
+      {
+        id: `custom-${Date.now()}`,
+        key: "",
+        value: false,
+      },
+    ]);
+  };
+
+  const handleRemoveCustomFlag = (id: string) => {
+    setCustomFeatureFlags((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,26 +153,34 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
     setIsSaving(true);
 
     try {
-      let parsedFlags: Record<string, boolean> = {};
-      try {
-        const raw = featureFlagsText.trim() || "{}";
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("Feature-Flags muessen ein JSON-Objekt sein.");
+      const duplicateKeys = new Set<string>();
+      const seenKeys = new Set<string>();
+
+      for (const item of customFeatureFlags) {
+        const trimmedKey = item.key.trim();
+        if (!trimmedKey) {
+          continue;
         }
 
-        for (const [key, value] of Object.entries(parsed)) {
-          if (typeof value !== "boolean") {
-            throw new Error(`Feature-Flag "${key}" muss true oder false sein.`);
-          }
+        if (KNOWN_FEATURE_FLAGS.some((flag) => flag.key === trimmedKey)) {
+          onSave(
+            "error",
+            `Das Zusatz-Flag "${trimmedKey}" ist bereits als Standard-Flag vorhanden.`,
+          );
+          return;
         }
-        parsedFlags = parsed as Record<string, boolean>;
-      } catch (error) {
+
+        if (seenKeys.has(trimmedKey)) {
+          duplicateKeys.add(trimmedKey);
+        }
+
+        seenKeys.add(trimmedKey);
+      }
+
+      if (duplicateKeys.size > 0) {
         onSave(
           "error",
-          error instanceof Error
-            ? error.message
-            : "Feature-Flags JSON ist ungueltig.",
+          `Zusatz-Flags enthalten doppelte Schluessel: ${Array.from(duplicateKeys).join(", ")}`,
         );
         return;
       }
@@ -68,7 +188,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
       const payload: TechnicalConfig = {
         ...formData,
         customer_key: (formData.customer_key || "default").trim() || "default",
-        feature_flags: parsedFlags,
+        feature_flags: normalizeFeatureFlags(knownFeatureFlags, customFeatureFlags),
       };
 
       const result = await configService.updateTechnicalConfig(payload);
@@ -88,7 +208,6 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {/* API-Konfiguration */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <LinkIcon className="w-5 h-5 text-primary" />
@@ -108,7 +227,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="https://kundendomain.de"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Haupt-Domain der App (wird für alle internen URLs verwendet)
+              Haupt-Domain der App (wird fuer alle internen URLs verwendet)
             </p>
           </div>
 
@@ -130,7 +249,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              API-Endpunkt für PDF-Versand *
+              API-Endpunkt fuer PDF-Versand *
             </label>
             <input
               type="url"
@@ -141,7 +260,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="https://api.ihre-domain.de/backend"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Vollständiger Pfad zum Backend (z.B. https://domain.de/backend)
+              Vollstaendiger Pfad zum Backend (z.B. https://domain.de/backend)
             </p>
           </div>
 
@@ -157,7 +276,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="https://wa.me/"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Base-URL für WhatsApp-Integration (Standard: https://wa.me/)
+              Base-URL fuer WhatsApp-Integration (Standard: https://wa.me/)
             </p>
           </div>
 
@@ -171,20 +290,19 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               onChange={(e) =>
                 handleChange(
                   "cors_allowed_origins",
-                  e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
+                  e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
                 )
               }
               className="input-field"
               placeholder="https://kundendomain.de, http://localhost:5173"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Liste der erlaubten Origins für CORS (Backend-Konfiguration)
+              Liste der erlaubten Origins fuer CORS (Backend-Konfiguration)
             </p>
           </div>
         </div>
       </div>
 
-      {/* Deployment */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Globe className="w-5 h-5 text-primary" />
@@ -204,7 +322,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="/pro/"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Deployment-Pfad (z.B. "/pro/" oder "/" für Root)
+              Deployment-Pfad (z.B. "/pro/" oder "/" fuer Root)
             </p>
           </div>
 
@@ -221,19 +339,18 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="https://ihre-domain.de"
             />
             <p className="text-xs text-gray-500 mt-1">
-              URL, die im QR-Code für mobile Installation angezeigt wird
+              URL, die im QR-Code fuer mobile Installation angezeigt wird
             </p>
           </div>
         </div>
       </div>
 
-      {/* Mandant & Feature Flags */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Cog className="w-5 h-5 text-primary" />
           Mandant & Feature-Flags
         </h3>
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Mandanten-Schluessel
@@ -246,30 +363,127 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
               placeholder="kunde-a"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Eindeutiger Schluessel pro Kunde (z.B. fuer Branding/Feature-Rollout).
+              Eindeutiger Schluessel pro Kunde, z.B. fuer Branding oder Feature-Rollout.
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Feature-Flags (JSON)
-            </label>
-            <textarea
-              value={featureFlagsText}
-              onChange={(e) => setFeatureFlagsText(e.target.value)}
-              rows={8}
-              className="input-field font-mono text-xs resize-y"
-              placeholder={'{\n  "vacation_enabled": true,\n  "advance_payment_enabled": true,\n  "custom_module_x": false\n}'}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Werte muessen boolesch sein (`true`/`false`). Beispiel:{" "}
-              {"{\"new_customer_feature\": true}"}.
-            </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Standard-Funktionen
+              </label>
+              <p className="text-xs text-gray-500">
+                Aktivieren oder deaktivieren Sie die wichtigsten Funktionen ohne JSON-Bearbeitung.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {KNOWN_FEATURE_FLAGS.map((flag) => {
+                const isEnabled = Boolean(knownFeatureFlags[flag.key]);
+
+                return (
+                  <label
+                    key={flag.key}
+                    className={`flex items-start gap-3 rounded-xl border p-4 transition-colors cursor-pointer ${
+                      isEnabled
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={(e) => handleKnownFlagChange(flag.key, e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{flag.label}</p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            isEnabled
+                              ? "bg-primary text-white"
+                              : "bg-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {isEnabled ? "Aktiv" : "Inaktiv"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600">{flag.description}</p>
+                      <p className="mt-2 text-xs font-mono text-gray-500">{flag.key}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-dashed border-gray-300 p-4 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Zusaetzliche Feature-Flags
+                </label>
+                <p className="text-xs text-gray-500">
+                  Fuer Sonderfaelle oder neue Module, die noch keine eigene Schalter-UI haben.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddCustomFlag}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Plus className="w-4 h-4" />
+                Flag hinzufuegen
+              </button>
+            </div>
+
+            {customFeatureFlags.length === 0 ? (
+              <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                Keine zusaetzlichen Flags vorhanden.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {customFeatureFlags.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px_auto] gap-3 items-center"
+                  >
+                    <input
+                      type="text"
+                      value={item.key}
+                      onChange={(e) =>
+                        handleCustomFlagChange(item.id, "key", e.target.value)
+                      }
+                      className="input-field"
+                      placeholder="custom_module_x"
+                    />
+                    <select
+                      value={String(item.value)}
+                      onChange={(e) =>
+                        handleCustomFlagChange(item.id, "value", e.target.value === "true")
+                      }
+                      className="input-field"
+                    >
+                      <option value="true">Aktiv</option>
+                      <option value="false">Inaktiv</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCustomFlag(item.id)}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                      aria-label={`Feature-Flag ${item.key || "neu"} entfernen`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* QR-Code-Typen */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <QrCode className="w-5 h-5 text-primary" />
@@ -283,9 +497,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
             <input
               type="text"
               value={formData.qr_code_type_timesheet}
-              onChange={(e) =>
-                handleChange("qr_code_type_timesheet", e.target.value)
-              }
+              onChange={(e) => handleChange("qr_code_type_timesheet", e.target.value)}
               required
               className="input-field"
               placeholder="TIMESHEET"
@@ -299,9 +511,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
             <input
               type="text"
               value={formData.qr_code_type_vacation}
-              onChange={(e) =>
-                handleChange("qr_code_type_vacation", e.target.value)
-              }
+              onChange={(e) => handleChange("qr_code_type_vacation", e.target.value)}
               required
               className="input-field"
               placeholder="VACATION_REQUEST"
@@ -325,12 +535,10 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
           </div>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          Diese Werte werden in den QR-Codes eingebettet (standardisiert und
-          kundenunabhängig)
+          Diese Werte werden in den QR-Codes eingebettet, standardisiert und kundenunabhaengig.
         </p>
       </div>
 
-      {/* PDF-Versand */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Cog className="w-5 h-5 text-primary" />
@@ -355,7 +563,6 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
         </div>
       </div>
 
-      {/* Integrationen */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Cog className="w-5 h-5 text-primary" />
@@ -372,7 +579,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
             <div>
               <p className="font-medium text-gray-900">E-Mail-Integration</p>
               <p className="text-sm text-gray-600">
-                PDFs können per E-Mail versendet werden
+                PDFs koennen per E-Mail versendet werden
               </p>
             </div>
           </label>
@@ -381,22 +588,19 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
             <input
               type="checkbox"
               checked={formData.enable_whatsapp}
-              onChange={(e) =>
-                handleChange("enable_whatsapp", e.target.checked)
-              }
+              onChange={(e) => handleChange("enable_whatsapp", e.target.checked)}
               className="w-5 h-5 text-primary rounded border-gray-300 focus:ring-primary"
             />
             <div>
               <p className="font-medium text-gray-900">WhatsApp-Integration</p>
               <p className="text-sm text-gray-600">
-                PDFs können über WhatsApp geteilt werden
+                PDFs koennen ueber WhatsApp geteilt werden
               </p>
             </div>
           </label>
         </div>
       </div>
 
-      {/* Submit Button */}
       <div className="flex justify-end pt-4 border-t border-gray-200">
         <button
           type="submit"
@@ -411,7 +615,7 @@ export const TechnicalConfigForm: React.FC<TechnicalConfigFormProps> = ({
           ) : (
             <>
               <Save className="w-5 h-5" />
-              <span>Änderungen speichern</span>
+              <span>Aenderungen speichern</span>
             </>
           )}
         </button>

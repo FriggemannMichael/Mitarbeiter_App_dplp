@@ -1,17 +1,17 @@
 {
   "company": {
-    "company_name": "Ihre Firma GmbH",
-    "company_address": "Musterstraße 1, 12345 Musterstadt",
-    "company_phone": "+49 000 000000",
-    "company_email": "info@ihre-firma.de",
-    "company_logo": "",
-    "primary_color": "#1976d2",
-    "theme_color": "#1976d2",
+    "company_name": "DPL Professionals GmbH",
+    "company_address": "Gerichtsstraße 1, 46236 Bottrop",
+    "company_phone": "0 20 41/77 98 7-0",
+    "company_email": "info@dplp.de",
+    "company_logo": "/customers/DPL%20Logo.svg",
+    "primary_color": "#212f61",
+    "theme_color": "#212f61",
     "allowed_emails": [
-      "info@ihre-firma.de"
+      "info@dplp.de"
     ],
     "allowed_whatsapp": [],
-    "default_email": "info@ihre-firma.de",
+    "default_email": "info@dplp.de",
     "default_whatsapp": ""
   },
   "pdf": {
@@ -30,23 +30,28 @@
     "qr_code_app_identifier": "Mitarbeiter App"
   },
   "technical": {
-    "customer_key": "default",
-    "api_endpoint": "/backend",
+    "customer_key": "dplp",
+    "api_endpoint": "https://ze-api.mitarbeiterapp.site",
     "deployment_path": "/",
     "qr_code_type_timesheet": "TIMESHEET",
     "qr_code_type_advance_payment": "ADVANCE_PAYMENT",
     "qr_code_type_vacation": "VACATION_REQUEST",
     "enable_whatsapp": false,
     "enable_email": true,
-    "pwa_qr_code_url": "",
-    "app_domain": "",
-    "backend_domain": "",
+    "pwa_qr_code_url": "https://ze.dplp.de",
+    "app_domain": "https://ze.dplp.de",
+    "backend_domain": "https://ze-api.mitarbeiterapp.site",
     "whatsapp_base_url": "https://wa.me/",
     "cors_allowed_origins": [
-      "http://localhost:5173"
+      "https://ze.dplp.de"
     ],
     "pdf_api_key": "",
-    "feature_flags": {}
+    "feature_flags": {
+      "vacation_enabled": false,
+      "advance_payment_enabled": false,
+      "dashboard_show_sick": false,
+      "dashboard_show_vacation": false
+    }
   },
   "work": {
     "max_work_hours_per_day": 12,

@@ -1,6 +1,12 @@
 import { useEffect, useRef } from "react";
 import { storage, weekUtils } from "../utils/storage";
 
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 interface MonthEndReminderOptions {
   onMonthEndDetected: (unsignedWeeks: Array<{ year: number; week: number }>) => void;
   enabled?: boolean;
@@ -51,7 +57,7 @@ export const useMonthEndReminder = ({
         const unsignedWeeks = findUnsignedWeeksInCurrentMonth();
 
         if (unsignedWeeks.length > 0) {
-          console.log(
+          devLog(
             `[MonthEndReminder] ${unsignedWeeks.length} unsignierte Wochen gefunden`,
             unsignedWeeks
           );

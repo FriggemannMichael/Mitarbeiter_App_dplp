@@ -7,8 +7,34 @@ import { storage } from "./utils/storage";
 import { createAppTheme, type AppThemeMode } from "./theme/appTheme";
 import './styles/index.css'
 
-// PWA Service Worker registrieren (nur im production build verfügbar)
-// Registrierung läuft über vite-plugin-pwa automatisch
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.getRegistrations().then((registrations) => {
+      const unregisterTasks = registrations
+        .filter((registration) => {
+          const scopeUrl = new URL(registration.scope);
+          return scopeUrl.origin === window.location.origin;
+        })
+        .map((registration) => registration.unregister());
+
+      void Promise.allSettled(unregisterTasks).then(() => {
+        if ("caches" in window) {
+          void caches.keys().then((cacheNames) => {
+            const deletionTasks = cacheNames
+              .filter(
+                (cacheName) =>
+                  cacheName.startsWith("workbox-") ||
+                  cacheName.startsWith("google-fonts-cache")
+              )
+              .map((cacheName) => caches.delete(cacheName));
+
+            void Promise.allSettled(deletionTasks);
+          });
+        }
+      });
+    });
+  });
+}
 
 const Root = () => {
   const [mode, setMode] = useState<AppThemeMode>(storage.getTheme());
@@ -38,14 +64,13 @@ const Root = () => {
       "app:set-theme-enabled",
       themeEnabledHandler as EventListener
     );
-    return () =>
-      {
-        window.removeEventListener("app:set-theme", handler as EventListener);
-        window.removeEventListener(
-          "app:set-theme-enabled",
-          themeEnabledHandler as EventListener
-        );
-      };
+    return () => {
+      window.removeEventListener("app:set-theme", handler as EventListener);
+      window.removeEventListener(
+        "app:set-theme-enabled",
+        themeEnabledHandler as EventListener
+      );
+    };
   }, []);
 
   return (

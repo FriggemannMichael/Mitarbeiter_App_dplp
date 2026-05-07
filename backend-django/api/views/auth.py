@@ -57,6 +57,7 @@ def login(request):
             'email': account.email or ADMIN_EMAIL,
             'role': account.role or auth_ctx.get('role'),
             'customer_key': account.customer_key or auth_ctx.get('customer_key'),
+            'token': token,
         })
         set_jwt_cookie(response, token)
         Account.objects.filter(pk=account.id).update(last_login_at=timezone.now())
@@ -83,6 +84,7 @@ def login(request):
             'email': ADMIN_EMAIL,
             'role': auth_ctx.get('role'),
             'customer_key': auth_ctx.get('customer_key'),
+            'token': token,
             'legacy_login': True,
         })
         set_jwt_cookie(response, token)

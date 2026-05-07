@@ -25,6 +25,23 @@ FROM_NAME = os.environ.get('FROM_NAME', 'Mitarbeiter Pro')
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL', '')
 
 
+def _format_smtp_error(exc: Exception) -> str:
+    """Liefert lesbare SMTP-Fehler mit konkreten Hinweisen fuer bekannte Provider."""
+    raw_error = str(exc)
+
+    if '5.7.139' in raw_error and 'SmtpClientAuthentication is disabled for the Tenant' in raw_error:
+        return (
+            'SMTP-Authentifizierung bei Microsoft 365 ist fuer diesen Tenant deaktiviert '
+            '(Fehler 5.7.139). Bitte SMTP AUTH fuer den Tenant oder das betroffene '
+            'Postfach aktivieren oder auf einen anderen Mailversand umstellen.'
+        )
+
+    if 'Authentication unsuccessful' in raw_error:
+        return f'Authentifizierung am SMTP-Server fehlgeschlagen: {raw_error}'
+
+    return raw_error
+
+
 def _create_connection():
     """Erstellt SMTP-Verbindung aus .env (nie aus DB!)."""
     if not SMTP_HOST or not SMTP_USERNAME:
@@ -89,6 +106,16 @@ def _send_pdf_via_smtp(
         server.quit()
 
 
+def _to_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return False
+
+
 def _should_simulate_email_send() -> bool:
     """
     Dev-Fallback: Simuliere Versand wenn explizit aktiviert oder
@@ -141,7 +168,7 @@ def send_test_email(recipient: str) -> dict:
             }
         }
     except Exception as e:
-        return {'success': False, 'error': f'SMTP-Fehler: {str(e)}'}
+        return {'success': False, 'error': f'SMTP-Fehler: {_format_smtp_error(e)}'}
 
 
 def send_pdf(params: dict) -> dict:
@@ -162,11 +189,8 @@ def send_pdf(params: dict) -> dict:
         date_range = params.get('date_range', '')
         total_hours = params.get('total_hours', '')
         amount = params.get('amount', '')
-
-        subject, body = _generate_email_content(
-            document_type, employee_name, week_number, week_year,
-            date_range, total_hours, amount
-        )
+        has_supervisor_signature = _to_bool(params.get('has_supervisor_signature', False))
+        is_customer_recipient = _to_bool(params.get('is_customer_recipient', False))
 
         pdf_data = base64.b64decode(pdf_base64)
 
@@ -178,6 +202,25 @@ def send_pdf(params: dict) -> dict:
             db_config.get('technical', {}).get('pdf_review_cc_email', '').strip()
             or db_config.get('company', {}).get('default_email', '').strip()
         )
+
+        admin_contact_email = cc_email or 'adminstration@dplp.de'
+
+        if document_type == 'timesheet' and (
+            is_customer_recipient or not has_supervisor_signature
+        ):
+            subject, body = _generate_customer_timesheet_email(
+                employee_name=employee_name,
+                week_number=week_number,
+                week_year=week_year,
+                date_range=date_range,
+                admin_email=admin_contact_email,
+                has_supervisor_signature=has_supervisor_signature,
+            )
+        else:
+            subject, body = _generate_email_content(
+                document_type, employee_name, week_number, week_year,
+                date_range, total_hours, amount, admin_email=admin_contact_email
+            )
 
         cc_recipients = []
         if document_type == 'timesheet' and cc_email and _EMAIL_RE.match(cc_email):
@@ -226,10 +269,13 @@ def send_pdf(params: dict) -> dict:
         )
 
         if should_send_customer_copy:
-            customer_subject = f'Kopie: {subject}'
-            customer_body = (
-                f'Sie erhalten eine Kopie des Dokuments von {employee_name}.\n\n'
-                f'{body}'
+            customer_subject, customer_body = _generate_customer_timesheet_email(
+                employee_name=employee_name,
+                week_number=week_number,
+                week_year=week_year,
+                date_range=date_range,
+                admin_email=admin_contact_email,
+                has_supervisor_signature=has_supervisor_signature,
             )
             try:
                 _send_pdf_via_smtp(
@@ -261,21 +307,28 @@ def send_pdf(params: dict) -> dict:
             }
         }
     except Exception as e:
-        return {'success': False, 'error': f'Email could not be sent: {str(e)}'}
+        return {'success': False, 'error': f'Email could not be sent: {_format_smtp_error(e)}'}
 
 
 def _generate_email_content(doc_type, employee_name, week_number, week_year,
-                             date_range, total_hours, amount) -> tuple:
-    """Generiert Betreff + Body – identisch zu PHP generateEmailContent()."""
+                             date_range, total_hours, amount, admin_email='') -> tuple:
+    """Generiert Betreff + Body."""
     if doc_type == 'timesheet':
-        subject = f'Stundennachweis - {employee_name}'
-        body = f'Anbei der Stundennachweis von {employee_name}'
+        subject = f'Stundennachweis KW {week_number}/{week_year} – {employee_name}' if week_number and week_year else f'Stundennachweis – {employee_name}'
+        body = f'Sehr geehrte Damen und Herren,\n\n'
+        body += f'anbei erhalten Sie den Stundennachweis von {employee_name}'
         if week_number and week_year:
             body += f' für KW {week_number}/{week_year}'
         if date_range:
             body += f' ({date_range})'
+        body += '.'
         if total_hours:
             body += f'\n\nGesamtstunden: {total_hours}'
+        body += '\n\nWir bitten Sie, den beigefügten Stundennachweis zu prüfen und durch Ihre Unterschrift zu bestätigen.'
+        if admin_email:
+            body += f' Bitte leiten Sie das unterschriebene Dokument anschließend an {admin_email} weiter.'
+        else:
+            body += ' Bitte leiten Sie das unterschriebene Dokument anschließend an die Administration weiter.'
     elif doc_type == 'sick_leave':
         subject = f'Krankmeldung - {employee_name}'
         body = f'Anbei die Krankmeldung von {employee_name}'
@@ -298,6 +351,46 @@ def _generate_email_content(doc_type, employee_name, week_number, week_year,
         body = f'Anbei ein Dokument von {employee_name}'
 
     body += '\n\nMit freundlichen Grüßen\nIhr Mitarbeiter Pro System'
+    return subject, body
+
+
+def _generate_customer_timesheet_email(
+    employee_name,
+    week_number,
+    week_year,
+    date_range,
+    admin_email='adminstration@dplp.de',
+    has_supervisor_signature=False,
+) -> tuple:
+    subject = (
+        f'Stundennachweis KW {week_number}/{week_year} - {employee_name}'
+        if week_number and week_year
+        else f'Stundennachweis - {employee_name}'
+    )
+
+    body = 'Sehr geehrte Damen und Herren,\n\n'
+    if has_supervisor_signature:
+        body += f'anbei erhalten Sie eine Kopie des Stundennachweises von {employee_name}'
+    else:
+        body += f'anbei erhalten Sie den Stundennachweis von {employee_name}'
+
+    if week_number and week_year:
+        body += f' fuer die KW {week_number}/{week_year}'
+    if date_range:
+        body += f' ({date_range})'
+
+    body += ' per automatischem Versand aus dem Mitarbeiter Pro System.'
+
+    if not has_supervisor_signature:
+        body += (
+            f'\n\nBitte bestaetigen Sie die geleisteten Stunden, indem Sie den '
+            f'Stundennachweis unterzeichnen und per Email an {admin_email} weiterleiten.'
+        )
+
+    body += (
+        '\n\nFuer Rueckfragen stehen wir Ihnen gerne unter der 02041 77987-0 zur Verfuegung.'
+        '\n\nFreundliche Gruesse\n\nDPL Professionals GmbH'
+    )
     return subject, body
 
 

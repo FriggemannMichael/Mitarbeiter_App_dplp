@@ -52,7 +52,14 @@ CORS_ALLOWED_ORIGINS = [
 if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES = [r'^http://localhost:\d+$']
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-CORS_ALLOW_HEADERS = ['content-type', 'authorization', 'x-api-key']
+CORS_ALLOW_HEADERS = [
+    'content-type',
+    'authorization',
+    'x-api-key',
+    'x-customer-key',
+    'x-employee-csrf',
+    'x-employee-session',
+]
 
 # REST Framework – kein eingebautes Auth, wir machen JWT-Cookie selbst
 REST_FRAMEWORK = {

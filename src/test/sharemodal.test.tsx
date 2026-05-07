@@ -152,6 +152,18 @@ describe("ShareModal", () => {
     weekNumber: 44,
     customerEmail: "kunde@example.com",
     pdfBlob: new Blob(["test-pdf"], { type: "application/pdf" }),
+    weekData: {
+      supervisorSignature: "data:image/png;base64,supervisor",
+      days: [
+        { date: "2025-10-27" },
+        { date: "2025-10-28" },
+        { date: "2025-10-29" },
+        { date: "2025-10-30" },
+        { date: "2025-10-31" },
+        { date: "2025-11-01" },
+        { date: "2025-11-02" },
+      ],
+    } as any,
   };
 
   beforeEach(() => {
@@ -276,6 +288,37 @@ describe("ShareModal", () => {
 
     expect(parsedBody.customer_email).toBe("kunde@example.com");
     expect(parsedBody.recipient_email).toBe("test@firma.de");
+    expect(parsedBody.has_supervisor_signature).toBe(true);
+    expect(parsedBody.is_customer_recipient).toBe(false);
+    expect(parsedBody.date_range).toBe("27.10.2025 - 02.11.2025");
+  });
+
+  it("sendet den PDF-API-Key mit, wenn er konfiguriert ist", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <ShareModal {...defaultProps} />,
+      createMockConfig({
+        technical: {
+          api_endpoint: "/backend",
+          pdf_api_key: "secret-key",
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Senden" }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/backend/api/send-pdf",
+        expect.objectContaining({
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": "secret-key",
+          },
+        }),
+      );
+    });
   });
 
   it("schließt das Modal über den Abbrechen-Button", async () => {

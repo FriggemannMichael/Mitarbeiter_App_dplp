@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -28,11 +29,14 @@ import {
   RestartAlt as ResetIcon,
   Check as CheckIcon,
 } from "@mui/icons-material";
-import { DayData } from "../utils/storage";
+import { DayData, storage } from "../utils/storage";
 import { formatDate, formatHours } from "../utils/formatters";
 import { useConfig } from "../contexts/ConfigContext";
+import { useWeekData } from "../contexts/WeekDataContext";
 import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
 import i18n from "../i18n";
+import { isFeatureEnabled } from "../utils/featureFlags";
+import type { ShiftModel } from "../types/weekdata.types";
 
 interface DayEditModalHybridProps {
   isOpen: boolean;
@@ -42,6 +46,7 @@ interface DayEditModalHybridProps {
   dayIndex: number;
   isEditable: boolean;
   isDayLocked?: boolean;
+  weekShiftModel?: ShiftModel;
   onTimeChange?: (
     dayIndex: number,
     field: keyof DayData,
@@ -75,6 +80,7 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
 }) => {
   const { t } = useTranslation();
   const { config } = useConfig();
+  const { currentWeek, allSheets } = useWeekData();
 
   // Validator
   const validator = useMemo(
@@ -89,6 +95,48 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
   const effectivelyEditable = isEditable && !isDayLocked;
   const currentLanguage = i18n.language || "de";
   const isWeekend = dayIndex === 5 || dayIndex === 6;
+  const simplifiedDayShiftEnabled = isFeatureEnabled(
+    config.technical,
+    "simple_dayshift_absence_with_job_fields",
+    false,
+  );
+  const useSimplifiedDayShiftMode = simplifiedDayShiftEnabled;
+  const inMemorySuggestionWeeks = useMemo(() => {
+    const dedupedWeeks = new Map<string, typeof currentWeek>();
+
+    allSheets.forEach((sheet) => {
+      dedupedWeeks.set(`${sheet.year}-${sheet.week}-${sheet.sheetId ?? 1}`, sheet);
+    });
+
+    if (currentWeek) {
+      dedupedWeeks.set(
+        `${currentWeek.year}-${currentWeek.week}-${currentWeek.sheetId ?? 1}`,
+        currentWeek,
+      );
+    }
+
+    return Array.from(dedupedWeeks.values()).filter(
+      (week): week is NonNullable<typeof currentWeek> => Boolean(week),
+    );
+  }, [allSheets, currentWeek]);
+  const orderNumberOptions = useMemo(
+    () =>
+      storage.getRecentDayFieldValues(
+        "orderNumber",
+        20,
+        inMemorySuggestionWeeks,
+      ),
+    [inMemorySuggestionWeeks],
+  );
+  const commissionOptions = useMemo(
+    () =>
+      storage.getRecentDayFieldValues(
+        "commission",
+        20,
+        inMemorySuggestionWeeks,
+      ),
+    [inMemorySuggestionWeeks],
+  );
 
   const handleTimeChange = (
     field: keyof DayData,
@@ -96,8 +144,21 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
   ) => {
     if (!onTimeChange) return;
 
+    const textFields: Array<keyof DayData> = [
+      "absenceNote",
+      "orderNumber",
+      "commission",
+      "note",
+      "nightShiftEndDate",
+    ];
+
     // Boolean oder Absence-Felder direkt durchreichen
-    if (typeof value === "boolean" || field === "absence" || value === null) {
+    if (
+      typeof value === "boolean" ||
+      field === "absence" ||
+      textFields.includes(field) ||
+      value === null
+    ) {
       onTimeChange(dayIndex, field, value);
       return;
     }
@@ -120,6 +181,8 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
       onTimeChange(dayIndex, "pause2To", "");
       onTimeChange(dayIndex, "absence", null);
       onTimeChange(dayIndex, "absenceNote", "");
+      onTimeChange(dayIndex, "orderNumber", "");
+      onTimeChange(dayIndex, "commission", "");
       onTimeChange(dayIndex, "isNightShift", false);
       onTimeChange(dayIndex, "nightShiftEndDate", "");
       onTimeChange(dayIndex, "note", "");
@@ -141,29 +204,37 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
   const hasAbsence = day.absence !== null && day.absence !== undefined;
   const isAbsenceBlockingTime = hasAbsence && day.absence !== "holiday";
 
-  const absenceOptions = [
-    { value: "sick", label: t("absence.sick") || "Krank", color: "error" },
-    {
-      value: "vacation",
-      label: t("absence.vacation") || "Urlaub",
-      color: "info",
-    },
-    {
-      value: "flextime",
-      label: t("absence.flextime") || "Gleitzeit",
-      color: "secondary",
-    },
-    {
-      value: "holiday",
-      label: t("absence.holiday") || "Feiertag",
-      color: "success",
-    },
-    {
-      value: "unpaid",
-      label: t("absence.unpaid") || "Unbezahlt",
-      color: "default",
-    },
-  ];
+  const absenceOptions = useSimplifiedDayShiftMode
+    ? [
+        {
+          value: "absent",
+          label: t("absence.absent") || "Abwesend",
+          color: "warning",
+        },
+      ]
+    : [
+        { value: "sick", label: t("absence.sick") || "Krank", color: "error" },
+        {
+          value: "vacation",
+          label: t("absence.vacation") || "Urlaub",
+          color: "info",
+        },
+        {
+          value: "flextime",
+          label: t("absence.flextime") || "Gleitzeit",
+          color: "secondary",
+        },
+        {
+          value: "holiday",
+          label: t("absence.holiday") || "Feiertag",
+          color: "success",
+        },
+        {
+          value: "unpaid",
+          label: t("absence.unpaid") || "Unbezahlt",
+          color: "default",
+        },
+      ];
 
   return (
     <Dialog
@@ -300,7 +371,9 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
                 fullWidth
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(2, 1fr)",
+                  gridTemplateColumns: useSimplifiedDayShiftMode
+                    ? "1fr"
+                    : "repeat(2, 1fr)",
                   gap: 0.75,
                   "& .MuiToggleButton-root": {
                     py: 1,
@@ -328,6 +401,68 @@ export const DayEditModalHybrid: React.FC<DayEditModalHybridProps> = ({
                 ))}
               </ToggleButtonGroup>
             </Box>
+          )}
+
+          {effectivelyEditable && useSimplifiedDayShiftMode && (
+            <>
+              <Divider />
+              <Stack spacing={2}>
+                <Autocomplete
+                  freeSolo
+                  options={orderNumberOptions}
+                  value={day.orderNumber || ""}
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") {
+                      handleTimeChange("orderNumber", value);
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    handleTimeChange("orderNumber", typeof value === "string" ? value : "");
+                  }}
+                  disabled={!effectivelyEditable}
+                  fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={
+                        t("day.orderNumberOptional") || "Auftragsnummer (optional)"
+                      }
+                      helperText={
+                        orderNumberOptions.length > 0
+                          ? "Bereits verwendete Auftragsnummern können ausgewählt oder überschrieben werden."
+                          : undefined
+                      }
+                    />
+                  )}
+                />
+                <Autocomplete
+                  freeSolo
+                  options={commissionOptions}
+                  value={day.commission || ""}
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") {
+                      handleTimeChange("commission", value);
+                    }
+                  }}
+                  onChange={(_, value) => {
+                    handleTimeChange("commission", typeof value === "string" ? value : "");
+                  }}
+                  disabled={!effectivelyEditable}
+                  fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t("day.commissionOptional") || "Kommission (optional)"}
+                      helperText={
+                        commissionOptions.length > 0
+                          ? "Bereits verwendete Kommissionen können ausgewählt oder überschrieben werden."
+                          : undefined
+                      }
+                    />
+                  )}
+                />
+              </Stack>
+            </>
           )}
 
           {/* Time Inputs */}

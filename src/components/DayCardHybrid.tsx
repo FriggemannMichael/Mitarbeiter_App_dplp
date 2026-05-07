@@ -21,6 +21,7 @@ import { DayData } from "../utils/storage";
 import { formatDate, formatHours } from "../utils/formatters";
 import { DayEditModalHybrid } from "./DayEditModalHybrid";
 import i18n from "../i18n";
+import type { ShiftModel } from "../types/weekdata.types";
 
 interface DayCardHybridProps {
   day: DayData;
@@ -29,6 +30,7 @@ interface DayCardHybridProps {
   isEditable: boolean;
   isDayLocked?: boolean;
   isDayInDifferentMonth?: boolean; // Neu: Zeigt an ob Tag in anderem Monat liegt
+  weekShiftModel?: ShiftModel;
   onTimeChange?: (
     dayIndex: number,
     field: keyof DayData,
@@ -54,6 +56,7 @@ export const DayCardHybrid: React.FC<DayCardHybridProps> = React.memo(
     isEditable,
     isDayLocked = false,
     isDayInDifferentMonth = false,
+    weekShiftModel,
     onTimeChange,
     onResetDay,
   }) => {
@@ -115,7 +118,10 @@ export const DayCardHybrid: React.FC<DayCardHybridProps> = React.memo(
     // Abwesenheits-Konfiguration
     const absenceConfig: Record<
       string,
-      { label: string; color: "error" | "info" | "secondary" | "success" }
+      {
+        label: string;
+        color: "error" | "info" | "secondary" | "success" | "warning";
+      }
     > = useMemo(
       () => ({
         sick: {
@@ -137,6 +143,10 @@ export const DayCardHybrid: React.FC<DayCardHybridProps> = React.memo(
         unpaid: {
           label: t("absence.unpaid") || "Unbezahlt",
           color: "info",
+        },
+        absent: {
+          label: t("absence.absent") || "Abwesend",
+          color: "warning",
         },
       }),
       [t]
@@ -359,6 +369,7 @@ export const DayCardHybrid: React.FC<DayCardHybridProps> = React.memo(
           dayIndex={dayIndex}
           isEditable={isEditable}
           isDayLocked={isDayLocked}
+          weekShiftModel={weekShiftModel}
           onTimeChange={onTimeChange}
           onResetDay={onResetDay}
         />

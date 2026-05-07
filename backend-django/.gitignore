@@ -1,4 +1,7 @@
 .env
+.env.app
+.env.app.prod
+seed_config.json
 DEV_CREDENTIALS.md
 __pycache__/
 *.pyc

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Box,
   Container,
   Typography,
@@ -104,6 +105,11 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
     switchToSheet,
     createNewSheet,
   } = useWeekData();
+
+  const customerOptions = useMemo(
+    () => storage.getRecentCustomers(20, allSheets),
+    [allSheets],
+  );
 
   // Berechne totalHours aus weekStats
   const weekStats = getWeekStats();
@@ -262,6 +268,8 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
         week_year: exportWeekData.year.toString(),
         date_range: dateRange,
         total_hours: weekStats.totalHours,
+        has_supervisor_signature: Boolean(exportWeekData.supervisorSignature),
+        is_customer_recipient: true,
       };
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -520,17 +528,35 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <BusinessIcon color="primary" />
-                <TextField
+                <Autocomplete
+                  freeSolo
+                  options={customerOptions}
+                  getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                   value={weekData.customer}
-                  onChange={(e) => updateCustomer(e.target.value)}
-                  placeholder={t("timesheet.placeholders.customer")}
-                  fullWidth
+                  onInputChange={(_, value, reason) => {
+                    if (reason !== "reset") updateCustomer(value);
+                  }}
+                  onChange={(_, value) => {
+                    if (value && typeof value !== "string") {
+                      updateCustomer(value.name);
+                      if (value.email) updateCustomerEmail(value.email);
+                    } else if (typeof value === "string") {
+                      updateCustomer(value);
+                    }
+                  }}
                   disabled={weekData.locked}
-                  required
-                  error={!weekData.customer.trim()}
-                  helperText={
-                    !weekData.customer.trim() ? t("validation.required") : ""
-                  }
+                  fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder={t("timesheet.placeholders.customer")}
+                      required
+                      error={!weekData.customer.trim()}
+                      helperText={
+                        !weekData.customer.trim() ? t("validation.required") : ""
+                      }
+                    />
+                  )}
                 />
               </Stack>
 
@@ -594,6 +620,7 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                 isEditable={isEditable}
                 isDayLocked={!isDayEditable(index)}
                 isDayInDifferentMonth={isDayInDifferentMonth(index)}
+                weekShiftModel={weekData.shiftModel}
                 onTimeChange={updateDayTime}
                 onResetDay={resetDay}
               />
@@ -874,18 +901,38 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
         onClose={() => setShowMonthEndReminder(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            mx: 2,
+            width: { xs: "calc(100% - 32px)", sm: "100%" },
+          },
+        }}
       >
-        <DialogTitle>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <CalendarIcon color="warning" sx={{ fontSize: 40 }} />
-            <Typography variant="h6">
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="flex-start"
+            sx={{ minWidth: 0 }}
+          >
+            <CalendarIcon
+              color="warning"
+              sx={{ fontSize: 40, flexShrink: 0, mt: 0.25 }}
+            />
+            <Typography
+              variant="h6"
+              sx={{ minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderTitle")}
             </Typography>
           </Stack>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers>
           <Stack spacing={2}>
-            <Typography variant="body1">
+            <Typography
+              variant="body1"
+              sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderMessage", {
                 count: unsignedWeeks.length,
               })}
@@ -908,6 +955,8 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                         key={`${week.year}-${week.week}`}
                         sx={{
                           display: "flex",
+                          flexWrap: "wrap",
+                          gap: 1,
                           justifyContent: "space-between",
                           alignItems: "center",
                           p: 1,
@@ -915,12 +964,19 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
                           borderRadius: 1,
                         }}
                       >
-                        <Typography variant="body2">
+                        <Typography
+                          variant="body2"
+                          sx={{ minWidth: 0, flex: "1 1 160px", overflowWrap: "anywhere" }}
+                        >
                           KW {week.week} / {week.year}
                         </Typography>
                         <Button
                           size="small"
                           variant="outlined"
+                          sx={{
+                            flexShrink: 0,
+                            width: { xs: "100%", sm: "auto" },
+                          }}
                           onClick={() => {
                             setWeek(week.year, week.week, 1);
                             setShowMonthEndReminder(false);
@@ -935,17 +991,37 @@ export const TimesheetHybrid: React.FC<TimesheetHybridProps> = ({
               </SectionCard>
             )}
 
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
               {t("timesheet.monthEndReminderHint")}
             </Typography>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowMonthEndReminder(false)}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+            pt: 2,
+            gap: 1,
+            flexDirection: { xs: "column-reverse", sm: "row" },
+            alignItems: "stretch",
+            "& > :not(style) ~ :not(style)": {
+              marginLeft: 0,
+            },
+          }}
+        >
+          <Button
+            sx={{ width: { xs: "100%", sm: "auto" } }}
+            onClick={() => setShowMonthEndReminder(false)}
+          >
             {t("backupReminder.remindLater")}
           </Button>
           <Button
             variant="contained"
+            sx={{ width: { xs: "100%", sm: "auto" } }}
             onClick={() => {
               if (unsignedWeeks.length > 0) {
                 setWeek(unsignedWeeks[0].year, unsignedWeeks[0].week, 1);

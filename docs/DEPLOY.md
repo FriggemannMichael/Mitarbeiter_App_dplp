@@ -45,6 +45,10 @@ JWT_SECRET=<langer-zufaelliger-string>
 JWT_EXPIRE_HOURS=8
 JWT_COOKIE_NAME=jwt
 
+# Mitarbeiter-Flow ueber getrennte Frontend-/API-Domain
+EMPLOYEE_DEVICE_COOKIE_SECURE=True
+EMPLOYEE_DEVICE_COOKIE_SAMESITE=None
+
 # Spam-Schutz – BEIDE Werte müssen mit public/config.json übereinstimmen
 PDF_API_SECRET=<langer-zufaelliger-string>   # z.B. openssl rand -hex 32
 PDF_RATE_LIMIT=10                            # max. Requests/Minute pro IP
@@ -73,6 +77,12 @@ DB_PASSWORD=<gleiches-passwort-wie-oben>
 
 > **Kritisch:** `api_endpoint` muss in Produktion die absolute URL sein.
 > In lokaler Entwicklung bleibt es `/backend` (Vite-Proxy).
+>
+> Wenn Frontend und API auf verschiedenen Domains liegen, muessen die
+> Employee-Device-Cookies im Django-Backend mit `SameSite=None` und
+> `Secure=True` gesetzt werden, sonst schlagen `save-timesheet` und
+> `list-timesheets` mit `401 Invalid CSRF token` bzw.
+> `Employee device not initialized` fehl.
 
 ---
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { APP_VERSION } from "../version";
 import { useTranslation } from "react-i18next";
 import { Shield, Globe, ChevronDown } from "lucide-react";
@@ -7,10 +7,22 @@ import { storage } from "../utils/storage";
 import { PWAInstallGuide } from "../components/PWAInstallGuide";
 import { useCompanyConfig, usePdfConfig } from "../contexts/ConfigContext";
 import { useConfig } from "../contexts/ConfigContext";
+import {
+  apiService,
+  type EmployeeSessionDto,
+} from "../services/apiService";
 
 interface WelcomeProps {
-  onComplete: () => void;
+  onAuthenticated: (session: EmployeeSessionDto) => void;
 }
+
+type WelcomeMode = "register" | "login" | "resetPin";
+type ConflictActionState = {
+  suggestedMode?: WelcomeMode;
+  canResetPin?: boolean;
+} | null;
+
+const SESSION_RETRY_DELAYS_MS = [0, 150, 400, 900];
 
 const languages = [
   { code: "de", name: "Deutsch", flag: "🇩🇪" },
@@ -25,111 +37,246 @@ const languages = [
   { code: "fa", name: "فارسی", flag: "🇮🇷" },
 ];
 
-export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
+export const Welcome: React.FC<WelcomeProps> = ({ onAuthenticated }) => {
   const { t, i18n } = useTranslation();
   const companyConfig = useCompanyConfig();
   const pdfConfig = usePdfConfig();
   const { config } = useConfig();
-  const defaultLogoSrc = `${import.meta.env.BASE_URL}logo.svg`;
+  const defaultLogoSrc = `${import.meta.env.BASE_URL}customers/DPL%20Logo.svg`;
+  const privacyPolicyUrl = "https://www.dplp.de/datenschutz/";
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
+  const [mode, setMode] = useState<WelcomeMode>("login");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinRepeat, setPinRepeat] = useState("");
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [consent, setConsent] = useState(false);
-  const [errors, setErrors] = useState<{
-    firstName?: string;
-    lastName?: string;
-    consent?: string;
-  }>({});
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [showPWAGuide, setShowPWAGuide] = useState(false);
+  const [pendingSession, setPendingSession] = useState<EmployeeSessionDto | null>(null);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginNeedsPhoneNumber, setLoginNeedsPhoneNumber] = useState(false);
+  const [conflictAction, setConflictAction] = useState<ConflictActionState>(null);
 
-  // Sprache ändern
   const handleLanguageChange = (languageCode: string) => {
     setSelectedLanguage(languageCode);
     i18n.changeLanguage(languageCode);
     storage.setLanguage(languageCode);
   };
 
-  // Form validieren
   const validateForm = () => {
-    const newErrors: typeof errors = {};
+    const nextErrors: Record<string, string | undefined> = {};
+    const requiredMessage = t("validation.required") || "Pflichtfeld";
 
-    if (!firstName.trim()) {
-      newErrors.firstName = t("validation.required");
+    if (!firstName.trim()) nextErrors.firstName = requiredMessage;
+    if (!lastName.trim()) nextErrors.lastName = requiredMessage;
+
+    if ((mode !== "login" || loginNeedsPhoneNumber) && !phoneNumber.trim()) {
+      nextErrors.phoneNumber = requiredMessage;
     }
 
-    if (!lastName.trim()) {
-      newErrors.lastName = t("validation.required");
+    if (!/^\d{4}$/.test(pin.trim())) {
+      nextErrors.pin = t("welcome.pin.invalid") || "PIN muss genau 4 Ziffern haben";
     }
 
-    if (!consent) {
-      newErrors.consent = t("validation.required");
+    if (mode !== "login" && pin.trim() !== pinRepeat.trim()) {
+      nextErrors.pinRepeat = t("welcome.pin.mismatch") || "PIN-Wiederholung stimmt nicht überein";
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (mode === "register" && !consent) {
+      nextErrors.consent = requiredMessage;
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  // Form absenden
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetSubmitState = () => {
+    setSubmitError("");
+    setConflictAction(null);
+  };
 
-    if (validateForm()) {
-      // Support tests which type a full name into the firstName field
-      let finalFirst = firstName.trim();
-      let finalLast = lastName.trim();
+  const delay = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
 
-      if (!finalLast && finalFirst.includes(" ")) {
-        const parts = finalFirst.split(/\s+/);
-        finalFirst = parts.shift() || "";
-        finalLast = parts.join(" ");
-        setFirstName(finalFirst);
-        setLastName(finalLast);
+  const resolveAuthenticatedSession = async (
+    fallbackSession: EmployeeSessionDto,
+  ): Promise<EmployeeSessionDto> => {
+    for (const retryDelayMs of SESSION_RETRY_DELAYS_MS) {
+      if (retryDelayMs > 0) {
+        await delay(retryDelayMs);
       }
 
-      const fullName = `${finalFirst} ${finalLast}`.trim();
-      storage.setEmployeeName(fullName);
+      try {
+        const sessionResponse = await apiService.getEmployeeSession();
+        const serverSession = sessionResponse.data?.employee;
+        if (sessionResponse.success && serverSession) {
+          return serverSession;
+        }
+      } catch {
+        // Some mobile browsers commit session cookies slightly after the login response.
+      }
+    }
+
+    return fallbackSession;
+  };
+
+  const completeAuthentication = (session: EmployeeSessionDto) => {
+    storage.setEmployeeName(session.display_name);
+    if (mode === "register") {
       storage.setConsent(true);
+    }
 
-      // In Test-Mode: don't show PWA guide, complete onboarding immediately
-      const isTestMode =
-        typeof process !== "undefined" &&
-        (process.env.NODE_ENV === "test" ||
-          (import.meta &&
-            (import.meta as any).env &&
-            (import.meta as any).env.MODE === "test"));
+    const isTestMode =
+      typeof process !== "undefined" &&
+      (process.env.NODE_ENV === "test" ||
+        (import.meta &&
+          (import.meta as any).env &&
+          (import.meta as any).env.MODE === "test"));
 
-      if (isTestMode) {
-        storage.setPWAGuideShown(true);
-        onComplete();
-        return;
-      }
+    if (isTestMode) {
+      storage.setPWAGuideShown(true);
+      onAuthenticated(session);
+      return;
+    }
 
-      // PWA Guide anzeigen, falls noch nicht gesehen
-      if (!storage.getPWAGuideShown()) {
-        setShowPWAGuide(true);
+    if (!storage.getPWAGuideShown()) {
+      setPendingSession(session);
+      setShowPWAGuide(true);
+      return;
+    }
+
+    onAuthenticated(session);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    resetSubmitState();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      if (mode === "register") {
+        const response = await apiService.registerEmployee({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          pin: pin.trim(),
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || t("welcome.error.register") || "Registrierung fehlgeschlagen");
+        }
+        completeAuthentication(await resolveAuthenticatedSession(employee));
+      } else if (mode === "login") {
+        const response = await apiService.loginEmployee({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          pin: pin.trim(),
+          phoneNumber: loginNeedsPhoneNumber ? phoneNumber.trim() : undefined,
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || t("welcome.error.login") || "Anmeldung fehlgeschlagen");
+        }
+        setLoginNeedsPhoneNumber(false);
+        completeAuthentication(await resolveAuthenticatedSession(employee));
       } else {
-        onComplete();
+        const response = await apiService.resetEmployeePin({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          pin: pin.trim(),
+        });
+        const employee = response.data?.employee;
+        if (!response.success || !employee) {
+          throw new Error(response.error || t("welcome.error.resetPin") || "PIN konnte nicht zurückgesetzt werden");
+        }
+        completeAuthentication(await resolveAuthenticatedSession(employee));
       }
+    } catch (submitErrorValue) {
+      const errorCode =
+        submitErrorValue instanceof Error && "code" in submitErrorValue
+          ? (submitErrorValue as Error & { code?: string }).code
+          : undefined;
+      const errorData =
+        submitErrorValue instanceof Error && "data" in submitErrorValue
+          ? (submitErrorValue as Error & { data?: unknown }).data
+          : undefined;
+
+      if (errorCode === "DUPLICATE_NAME" && mode === "login") {
+        setLoginNeedsPhoneNumber(true);
+      }
+
+      if (errorCode === "ACCOUNT_ALREADY_EXISTS") {
+        const details =
+          errorData && typeof errorData === "object"
+            ? (errorData as {
+                suggestedMode?: WelcomeMode;
+                canResetPin?: boolean;
+              })
+            : undefined;
+        setConflictAction({
+          suggestedMode: details?.suggestedMode || "login",
+          canResetPin: details?.canResetPin ?? true,
+        });
+      } else {
+        setConflictAction(null);
+      }
+
+      setSubmitError(
+        submitErrorValue instanceof Error
+          ? submitErrorValue.message
+          : t("welcome.error.generic") || "Aktion konnte nicht abgeschlossen werden",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // PWA Guide abgeschlossen
   const handlePWAGuideComplete = () => {
     setShowPWAGuide(false);
-    onComplete();
+    if (pendingSession) {
+      onAuthenticated(pendingSession);
+      setPendingSession(null);
+    }
   };
 
-  // Laden der gespeicherten Daten
   useEffect(() => {
     const savedName = storage.getEmployeeName();
     if (savedName) {
-      const nameParts = savedName.split(" ");
-      setFirstName(nameParts[0] || "");
-      setLastName(nameParts.slice(1).join(" ") || "");
+      const parts = savedName.split(" ");
+      setFirstName(parts[0] || "");
+      setLastName(parts.slice(1).join(" ") || "");
+      setMode("login");
     }
     setConsent(storage.getConsent());
   }, []);
+
+  const modeDescription =
+    mode === "register"
+      ? t("welcome.mode.desc.register") || "Beim ersten Mal bitte Name, Handynummer und PIN festlegen."
+      : mode === "login"
+        ? loginNeedsPhoneNumber
+          ? t("welcome.mode.desc.loginDuplicate") || "Für diesen Namen gibt es mehrere Mitarbeiter. Bitte zusätzlich die Handynummer eingeben."
+          : t("welcome.mode.desc.login") || "Bitte mit Vorname, Nachname und PIN anmelden."
+        : t("welcome.mode.desc.resetPin") || "Handynummer eingeben und eine neue PIN festlegen.";
+
+  const submitLabel =
+    mode === "register"
+      ? t("welcome.submit.register") || "Jetzt registrieren"
+      : mode === "login"
+        ? t("welcome.submit.login") || "Anmelden"
+        : t("welcome.submit.resetPin") || "PIN zurücksetzen";
 
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
@@ -140,7 +287,6 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
           transition={{ duration: 0.5 }}
         >
           <div className="app-surface-card rounded-2xl overflow-hidden">
-            {/* Header */}
             <div className="text-center p-6 sm:p-8 bg-gradient-to-br from-slate-50 to-white border-b border-slate-200">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -151,7 +297,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                 <img
                   src={companyConfig.company_logo || defaultLogoSrc}
                   alt={companyConfig.company_name || "Firma"}
-                  className="h-20 w-auto rounded-xl shadow-sm"
+                  className="h-28 w-auto"
                 />
               </motion.div>
               <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
@@ -160,15 +306,37 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
               <h2 className="text-lg sm:text-xl text-slate-600 mb-1 font-medium">
                 {t("welcome.subtitle")}
               </h2>
-              <p className="text-sm text-slate-500">
-                {t("welcome.description")}
-              </p>
+              <p className="text-sm text-slate-500">{modeDescription}</p>
             </div>
 
-            {/* Main Form */}
             <div className="p-6 sm:p-8 space-y-6">
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
+                {[
+                  { id: "register", label: t("welcome.mode.register") || "Registrieren" },
+                  { id: "login", label: t("welcome.mode.login") || "Anmelden" },
+                  { id: "resetPin", label: t("welcome.mode.resetPin") || "PIN vergessen" },
+                ].map((item) => (
+                  <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setMode(item.id as WelcomeMode);
+                        resetSubmitState();
+                        setErrors({});
+                        setLoginNeedsPhoneNumber(false);
+                      }}
+                    className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                      mode === item.id
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Language Selection */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -196,7 +364,6 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                   </label>
                 </motion.div>
 
-                {/* Name Fields */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -213,6 +380,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                         value={firstName}
                         onChange={(e) => {
                           setFirstName(e.target.value);
+                          if (mode === "login" && loginNeedsPhoneNumber) {
+                            setLoginNeedsPhoneNumber(false);
+                          }
                           if (errors.firstName) {
                             setErrors({ ...errors, firstName: undefined });
                           }
@@ -238,6 +408,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                         value={lastName}
                         onChange={(e) => {
                           setLastName(e.target.value);
+                          if (mode === "login" && loginNeedsPhoneNumber) {
+                            setLoginNeedsPhoneNumber(false);
+                          }
                           if (errors.lastName) {
                             setErrors({ ...errors, lastName: undefined });
                           }
@@ -254,82 +427,218 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                   </div>
                 </motion.div>
 
-                {/* Privacy Section */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <div className="app-surface-card rounded-xl p-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowPrivacy(!showPrivacy)}
-                      className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center flex-shrink-0">
-                          <Shield className="w-5 h-5 text-primary-600" />
-                        </div>
-                        <span className="font-semibold text-slate-900">
-                          {t("welcome.privacy.title")}
-                        </span>
-                      </div>
-                      <motion.div
-                        animate={{ rotate: showPrivacy ? 180 : 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <ChevronDown className="w-5 h-5 text-primary-600" />
-                      </motion.div>
-                    </button>
-
-                    {showPrivacy && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="mt-4 pt-4 border-t border-slate-200"
-                      >
-                        <p className="text-sm text-slate-600 leading-relaxed">
-                          {t("welcome.privacy.text")}
-                        </p>
-                      </motion.div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Consent Checkbox */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.6 }}
-                >
-                  <label className="flex items-start space-x-3 cursor-pointer group">
-                    <div className="relative flex items-center justify-center flex-shrink-0">
+                {(mode !== "login" || loginNeedsPhoneNumber) && (
+                  <div>
+                    <label className="block mb-2">
+                      <span className="text-slate-700 font-medium">
+                        {t("welcome.phoneNumber") || "Handynummer"} <span className="text-red-500">*</span>
+                      </span>
                       <input
-                        type="checkbox"
-                        checked={consent}
+                        type="tel"
+                        value={phoneNumber}
                         onChange={(e) => {
-                          setConsent(e.target.checked);
-                          if (errors.consent) {
-                            setErrors({ ...errors, consent: undefined });
+                          setPhoneNumber(e.target.value);
+                          if (errors.phoneNumber) {
+                            setErrors({ ...errors, phoneNumber: undefined });
                           }
                         }}
-                        className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                        placeholder={t("welcome.placeholders.phoneNumber") || "z. B. 0176 12345678"}
+                        className={`input-field mt-2 ${
+                          errors.phoneNumber ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                        }`}
                       />
-                    </div>
-                    <span className="text-sm text-slate-600 flex-1 pt-0.5">
-                      {t("welcome.consent")}
-                    </span>
-                  </label>
-                  {errors.consent && (
-                    <p className="text-red-500 text-sm mt-2 ml-8">
-                      {errors.consent}
-                    </p>
-                  )}
-                </motion.div>
+                      {errors.phoneNumber && (
+                        <p className="text-red-500 text-sm mt-1">{errors.phoneNumber}</p>
+                      )}
+                    </label>
+                  </div>
+                )}
 
-                {/* Submit Button */}
+                <div className={mode === "login" && !loginNeedsPhoneNumber ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
+                  <div>
+                    <label className="block mb-2">
+                      <span className="text-slate-700 font-medium">
+                        {t("welcome.pin") || "4-stellige PIN"} <span className="text-red-500">*</span>
+                      </span>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={pin}
+                        onChange={(e) => {
+                          setPin(e.target.value.replace(/\D+/g, "").slice(0, 4));
+                          if (errors.pin) {
+                            setErrors({ ...errors, pin: undefined });
+                          }
+                        }}
+                        placeholder="••••"
+                        className={`input-field mt-2 ${
+                          errors.pin ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                        }`}
+                      />
+                      {errors.pin && (
+                        <p className="text-red-500 text-sm mt-1">{errors.pin}</p>
+                      )}
+                    </label>
+                  </div>
+
+                  {mode !== "login" && (
+                    <div>
+                      <label className="block mb-2">
+                        <span className="text-slate-700 font-medium">
+                          {t("welcome.pinRepeat") || "PIN wiederholen"} <span className="text-red-500">*</span>
+                        </span>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={pinRepeat}
+                          onChange={(e) => {
+                            setPinRepeat(e.target.value.replace(/\D+/g, "").slice(0, 4));
+                            if (errors.pinRepeat) {
+                              setErrors({ ...errors, pinRepeat: undefined });
+                            }
+                          }}
+                          placeholder="••••"
+                          className={`input-field mt-2 ${
+                            errors.pinRepeat ? "border-red-300 focus:ring-red-500 focus:border-red-500" : ""
+                          }`}
+                        />
+                        {errors.pinRepeat && (
+                          <p className="text-red-500 text-sm mt-1">{errors.pinRepeat}</p>
+                        )}
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {mode === "register" && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 }}
+                    >
+                      <div className="app-surface-card rounded-xl p-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowPrivacy(!showPrivacy)}
+                          className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-200 flex items-center justify-center flex-shrink-0">
+                              <Shield className="w-5 h-5 text-primary-600" />
+                            </div>
+                            <span className="font-semibold text-slate-900">
+                              {t("welcome.privacy.title")}
+                            </span>
+                          </div>
+                          <motion.div
+                            animate={{ rotate: showPrivacy ? 180 : 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <ChevronDown className="w-5 h-5 text-primary-600" />
+                          </motion.div>
+                        </button>
+
+                        {showPrivacy && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            transition={{ duration: 0.3 }}
+                            className="mt-4 pt-4 border-t border-slate-200"
+                          >
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              {t("welcome.privacy.text")}
+                            </p>
+                            <a
+                              href={privacyPolicyUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex text-sm font-medium text-primary-700 hover:text-primary-800 underline underline-offset-2"
+                            >
+                              {t("welcome.privacy.link") || "Datenschutzhinweise öffnen"}
+                            </a>
+                          </motion.div>
+                        )}
+                      </div>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.6 }}
+                    >
+                      <label className="flex items-start space-x-3 cursor-pointer group">
+                        <div className="relative flex items-center justify-center flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={consent}
+                            onChange={(e) => {
+                              setConsent(e.target.checked);
+                              if (errors.consent) {
+                                setErrors({ ...errors, consent: undefined });
+                              }
+                            }}
+                            className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-sm text-slate-600 flex-1 pt-0.5">
+                          {t("welcome.consent")}
+                        </span>
+                      </label>
+                      {errors.consent && (
+                        <p className="text-red-500 text-sm mt-2 ml-8">{errors.consent}</p>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+
+                {submitError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {submitError}
+                  </div>
+                )}
+
+                {conflictAction && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 space-y-3">
+                    <p className="font-medium">
+                      Dieses Konto ist bereits vorhanden. Bitte melden Sie sich
+                      an oder setzen Sie Ihre PIN zurück.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode(conflictAction.suggestedMode || "login");
+                          setLoginNeedsPhoneNumber(false);
+                          resetSubmitState();
+                          setPin("");
+                          setPinRepeat("");
+                        }}
+                        className="rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+                      >
+                        {t("welcome.submit.login") || "Anmelden"}
+                      </button>
+                      {conflictAction.canResetPin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("resetPin");
+                            setLoginNeedsPhoneNumber(false);
+                            resetSubmitState();
+                            setPin("");
+                            setPinRepeat("");
+                          }}
+                          className="rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+                        >
+                          {t("welcome.submit.resetPin") || "PIN zurücksetzen"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -337,28 +646,24 @@ export const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
                 >
                   <button
                     type="submit"
-                    disabled={!consent}
+                    disabled={isSubmitting}
                     className="w-full py-3 text-base font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {t("welcome.continue")}
+                    {isSubmitting ? t("welcome.submitting") || "Bitte warten..." : submitLabel}
                   </button>
                 </motion.div>
               </form>
             </div>
 
-            {/* Footer */}
             <div className="text-center p-6 bg-slate-50/70 border-t border-slate-200">
               <p className="text-sm text-slate-500">
                 {t("footer.version", { version: APP_VERSION })}
               </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {t("footer.features")}
-              </p>
+              <p className="text-xs text-slate-400 mt-1">{t("footer.features")}</p>
             </div>
           </div>
         </motion.div>
 
-        {/* PWA Install Guide */}
         {showPWAGuide && (
           <PWAInstallGuide
             onClose={handlePWAGuideComplete}

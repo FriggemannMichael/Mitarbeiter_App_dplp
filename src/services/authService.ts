@@ -9,6 +9,7 @@ import { apiService } from './apiService';
 const AUTH_KEY = 'admin_authenticated';
 const AUTH_TIMESTAMP_KEY = 'admin_auth_timestamp';
 const AUTH_USER_KEY = 'admin_auth_user';
+const AUTH_TOKEN_KEY = 'admin_auth_token';
 const SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 Stunden
 
 /**
@@ -39,10 +40,12 @@ class AuthService {
       const response = await apiService.login(username, password);
 
       if (response.success && response.data) {
+        apiService.setAuthToken(response.data.token || '');
         // Speichere Auth-Status in localStorage
         localStorage.setItem(AUTH_KEY, 'true');
         localStorage.setItem(AUTH_TIMESTAMP_KEY, Date.now().toString());
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.data));
+        localStorage.setItem(AUTH_TOKEN_KEY, response.data.token || '');
 
         return {
           success: true,
@@ -74,9 +77,11 @@ class AuthService {
     }
 
     // Lokalen Auth-Status immer löschen
+    apiService.setAuthToken('');
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(AUTH_TIMESTAMP_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
   }
 
   /**
@@ -85,8 +90,9 @@ class AuthService {
   isAuthenticated(): boolean {
     const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
     const timestamp = localStorage.getItem(AUTH_TIMESTAMP_KEY);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
-    if (!isAuth || !timestamp) {
+    if (!isAuth || !timestamp || !token) {
       return false;
     }
 
@@ -114,6 +120,8 @@ class AuthService {
 
   getCurrentUser(): AuthUser | null {
     try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+      apiService.setAuthToken(token);
       const raw = localStorage.getItem(AUTH_USER_KEY);
       if (!raw) return null;
       return JSON.parse(raw) as AuthUser;

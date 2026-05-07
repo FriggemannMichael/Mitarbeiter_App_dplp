@@ -4,7 +4,7 @@ import { Mail, X, Lock, AlertCircle } from "lucide-react";
 import { useConfig } from "../contexts/ConfigContext";
 import { useNotification } from "../contexts/NotificationContext";
 import { WorkTimeValidator } from "../core/validation/WorkTimeValidator";
-import { WeekData } from "../utils/storage";
+import { WeekData, weekUtils } from "../utils/storage";
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -45,6 +45,44 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   );
   const [isSending, setIsSending] = useState(false);
   const [success, setSuccess] = useState(false);
+  const hasSupervisorSignature = Boolean(weekData?.supervisorSignature);
+  const adminContactEmail =
+    config.technical.pdf_review_cc_email?.trim() ||
+    config.company.default_email?.trim() ||
+    "adminstration@dplp.de";
+
+  const dateRange = useMemo(() => {
+    const dates = (weekData?.days || [])
+      .map((day) => day.date)
+      .filter(Boolean)
+      .map((date) => new Date(date));
+
+    if (dates.length === 0) {
+      return "";
+    }
+
+    return `${weekUtils.formatDate(dates[0])} - ${weekUtils.formatDate(dates[dates.length - 1])}`;
+  }, [weekData]);
+
+  const buildCustomerEmailBody = () => {
+    const intro = hasSupervisorSignature
+      ? "anbei erhalten Sie eine Kopie des Stundennachweises"
+      : "anbei erhalten Sie den Stundennachweis";
+    const dateRangeText = dateRange ? ` (${dateRange})` : "";
+    const signatureRequest = hasSupervisorSignature
+      ? ""
+      : `\n\nBitte bestätigen Sie die geleisteten Stunden, indem Sie den Stundennachweis unterzeichnen und per Email an ${adminContactEmail} weiterleiten.`;
+
+    return `Sehr geehrte Damen und Herren,
+
+${intro} von ${employeeName} für die KW ${weekNumber}/${weekYear}${dateRangeText} per automatischem Versand aus dem Mitarbeiter Pro System.${signatureRequest}
+
+Für Rückfragen stehen wir Ihnen gerne unter der 02041 77987-0 zur Verfügung.
+
+Freundliche Grüße
+
+DPL Professionals GmbH`;
+  };
 
   // Validierung der WeekData
   const validationResult = useMemo(() => {
@@ -100,15 +138,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           filename: fileName,
           week_number: weekNumber.toString(),
           week_year: weekYear.toString(),
+          date_range: dateRange,
+          has_supervisor_signature: hasSupervisorSignature,
+          is_customer_recipient: false,
         };
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (config.technical.pdf_api_key) {
+          headers["X-Api-Key"] = config.technical.pdf_api_key;
+        }
 
         const response = await fetch(
           `${config.technical.api_endpoint}/api/send-pdf`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify(payload),
           },
         );
@@ -183,15 +229,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
             // Bei Erfolg: Kunde-E-Mail separat öffnen
             if (customerEmail && customerEmail.trim()) {
-              const customerSubject = `Kopie: Stundennachweis - ${employeeName} - KW ${weekNumber}/${weekYear}`;
-              const customerBody = `Sehr geehrte Damen und Herren,
-
-Sie erhalten eine Kopie des Stundennachweises für:
-- Mitarbeiter: ${employeeName}
-- Kalenderwoche: ${weekNumber}/${weekYear}
-- Datei: ${fileName}
-
-Mit freundlichen Grüßen`;
+              const customerSubject = `Stundennachweis - ${employeeName} - KW ${weekNumber}/${weekYear}`;
+              const customerBody = buildCustomerEmailBody();
 
               const customerMailtoLink = `mailto:${customerEmail}?subject=${encodeURIComponent(
                 customerSubject,
@@ -226,27 +265,20 @@ Mit freundlichen Grüßen`;
           subject,
         )}&body=${encodeURIComponent(
           message +
-            "\n\n⚠️ Bitte hängen Sie die heruntergeladene PDF-Datei manuell an.",
+            "\n\nBitte h�ngen Sie die heruntergeladene PDF-Datei manuell an.",
         )}`;
         window.open(mailtoLink, "_blank");
 
         if (customerEmail && customerEmail.trim()) {
-          const customerSubject = `Kopie: Stundennachweis - ${employeeName} - KW ${weekNumber}/${weekYear}`;
-          const customerBody = `Sehr geehrte Damen und Herren,
-
-Sie erhalten eine Kopie des Stundennachweises für:
-- Mitarbeiter: ${employeeName}
-- Kalenderwoche: ${weekNumber}/${weekYear}
-- Datei: ${fileName}
-
-Mit freundlichen Grüßen`;
+          const customerSubject = `Stundennachweis - ${employeeName} - KW ${weekNumber}/${weekYear}`;
+          const customerBody = buildCustomerEmailBody();
 
           setTimeout(() => {
             const customerMailtoLink = `mailto:${customerEmail}?subject=${encodeURIComponent(
               customerSubject,
             )}&body=${encodeURIComponent(
               customerBody +
-                "\n\n⚠️ Bitte hängen Sie die heruntergeladene PDF-Datei manuell an.",
+                "\n\nBitte h�ngen Sie die heruntergeladene PDF-Datei manuell an.",
             )}`;
             window.open(customerMailtoLink, "_blank");
           }, 1000);
@@ -554,3 +586,4 @@ Mit freundlichen Grüßen`;
     </div>
   );
 };
+

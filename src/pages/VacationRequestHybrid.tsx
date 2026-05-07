@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Autocomplete,
   Box,
   Container,
   Typography,
@@ -37,6 +38,12 @@ import {
   VacationFormData,
   VacationRequest as VacationRequestType,
 } from "../types/vacation";
+
+const devLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
 
 interface VacationRequestHybridProps {
   employeeName: string;
@@ -141,6 +148,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
 
   const [formData, setFormData] = useState<VacationFormData>(INITIAL_FORM_DATA);
   const [customer, setCustomer] = useState("");
+  const customerOptions = useMemo(() => storage.getRecentCustomers(20), []);
   const [hasReadTerms, setHasReadTerms] = useState(false);
   const [employeeSignature, setEmployeeSignature] = useState<
     string | undefined
@@ -218,7 +226,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
   };
 
   const confirmSubmit = async () => {
-    console.log("🟢 confirmSubmit called");
+    devLog("🟢 confirmSubmit called");
 
     if (!confirmChecked) {
       warning(t("vacation.mustConfirmUnderstood"));
@@ -227,7 +235,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
 
     setIsSubmitting(true);
     try {
-      console.log("🟢 Creating vacation request...");
+      devLog("🟢 Creating vacation request...");
       const vacationRequest = createVacationRequest(
         formData,
         employeeName,
@@ -239,16 +247,16 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
       );
 
       VacationStorage.saveRequest(vacationRequest);
-      console.log("🟢 Vacation request saved to storage");
+      devLog("🟢 Vacation request saved to storage");
 
-      console.log("🟢 Generating PDF...");
+      devLog("🟢 Generating PDF...");
       const pdfBytes = await VacationPdfExporter.generatePDF(
         vacationRequest,
         config
       );
       const blob = createPdfBlob(pdfBytes);
       const filename = generatePdfFilename(employeeName);
-      console.log("🟢 PDF generated:", filename);
+      devLog("🟢 PDF generated:", filename);
 
       // Convert PDF to base64
       const base64Pdf = btoa(
@@ -277,7 +285,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
 
       // Send PDF via email (Backend handles PDF attachment automatically)
       try {
-        console.log("🔵 Sending vacation PDF via backend...", {
+        devLog("🔵 Sending vacation PDF via backend...", {
           recipient_email: recipientEmail,
           document_type: "vacation",
           employee_name: employeeName,
@@ -295,13 +303,13 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
           date_range: dateRange,
         });
 
-        console.log("✅ Backend response:", response);
+        devLog("✅ Backend response:", response);
 
         if (response.success) {
-          console.log("🟢 Backend successfully sent email!");
+          devLog("🟢 Backend successfully sent email!");
           success(t("vacation.submitSuccess"));
         } else {
-          console.log("🔴 Backend returned success=false");
+          devLog("🔴 Backend returned success=false");
           throw new Error(response.error || "Backend returned success=false");
         }
       } catch (emailError) {
@@ -313,7 +321,7 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
         showError(`${t("errors.shareError")}: ${errorMessage}`);
 
         // Fallback: Nur bei Fehler lokalen Download anbieten
-        console.log("🔴 Entering fallback - opening share dialog");
+        devLog("🔴 Entering fallback - opening share dialog");
         warning(t("vacation.submitError"));
         const shareSuccess = await trySharePdf(blob, filename, employeeName);
         if (!shareSuccess) {
@@ -322,14 +330,14 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
         return; // Wichtig: Return hier, damit nicht weiter ausgeführt wird
       }
 
-      console.log("🟢 Closing dialog and resetting form");
+      devLog("🟢 Closing dialog and resetting form");
       setShowConfirmDialog(false);
       resetForm();
     } catch (error) {
       console.error("🔴 Outer error:", error);
       showError(t("vacation.submitError"));
     } finally {
-      console.log("🟢 Finally: Setting isSubmitting to false");
+      devLog("🟢 Finally: Setting isSubmitting to false");
       setIsSubmitting(false);
     }
   };
@@ -411,13 +419,30 @@ export const VacationRequestHybrid: React.FC<VacationRequestHybridProps> = ({
               <SectionCard title={t("timesheet.customer")}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <BusinessIcon sx={{ color: "#3b82f6" }} />
-                  <TextField
+                  <Autocomplete
+                    freeSolo
+                    options={customerOptions}
+                    getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                     value={customer}
-                    onChange={(e) => setCustomer(e.target.value)}
-                    placeholder={t("timesheet.placeholders.customer")}
+                    onInputChange={(_, value, reason) => {
+                      if (reason !== "reset") setCustomer(value);
+                    }}
+                    onChange={(_, value) => {
+                      if (value && typeof value !== "string") {
+                        setCustomer(value.name);
+                      } else if (typeof value === "string") {
+                        setCustomer(value);
+                      }
+                    }}
                     fullWidth
-                    required
-                    error={!customer.trim()}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder={t("timesheet.placeholders.customer")}
+                        required
+                        error={!customer.trim()}
+                      />
+                    )}
                   />
                 </Stack>
               </SectionCard>
